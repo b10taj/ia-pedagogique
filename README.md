@@ -27,7 +27,7 @@ Une application interactive basée sur l'IA pour résoudre des exercices d'élec
 
 ### Prérequis
 - Python 3.8+
-- Clé API Anthropic (gratuite sur [console.anthropic.com](https://console.anthropic.com))
+- Clé API Anthropic (A retrouver sur [console.anthropic.com](https://console.anthropic.com))
 
 ### Étapes
 
