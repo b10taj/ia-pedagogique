@@ -61,8 +61,6 @@ st.write("### 💬 Conversation")
 if st.session_state.circuit_type:
     if st.session_state.circuit_type == "diode_zener_simple":
         st.info("🔍 Type détecté : **Circuit à Diode Zener (Simple)**")
-    elif st.session_state.circuit_type == "diode_zener_boites":
-        st.info("🔍 Type détecté : **Circuit à Diode Zener (Boîtes Noires)**")
     elif st.session_state.circuit_type == "diode_simple":
         st.info("🔍 Type détecté : **Circuit à Diode (Simple)**")
     elif st.session_state.circuit_type == "diode_boites":
@@ -71,6 +69,12 @@ if st.session_state.circuit_type:
         st.info("🔍 Type détecté : **Inverseur Bipolaire**")
     elif st.session_state.circuit_type == "transistor":
         st.info("🔍 Type détecté : **Transistor Bipolaire**")
+    elif st.session_state.circuit_type == "puissance_deux_sources":
+        st.info("🔍 Type détecté : **Puissance (Deux Sources + Résistance)**")
+    elif st.session_state.circuit_type == "puissance_parallele":
+        st.info("🔍 Type détecté : **Puissance (Parallèle)**")
+    elif st.session_state.circuit_type == "puissance_serie":
+        st.info("🔍 Type détecté : **Puissance (Série)**")
     elif st.session_state.circuit_type == "diviseur":
         st.info("🔍 Type détecté : **Diviseur de Tension**")
     else:

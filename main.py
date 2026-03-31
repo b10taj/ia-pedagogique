@@ -14,6 +14,9 @@ from prompts import (
     PROMPT_TRANSISTOR_BIPOLAIRE,
     PROMPT_INVERSEUR_BIPOLAIRE,
     PROMPT_DIVISEUR_TENSION,
+    PROMPT_PUISSANCE_SERIE,
+    PROMPT_PUISSANCE_PARALLELE,
+    PROMPT_PUISSANCE_DEUX_SOURCES,
     PROMPT_GENERAL
 )
 
@@ -47,11 +50,23 @@ def construire_message_avec_image(prompt: str, image_base64: str = None):
 def detecter_type_probleme(question: str) -> str:
     """Détecte le type de problème électronique dans la question."""
     question_lower = question.lower()
+
+    def contient_un_mot_cle(texte: str, mots_cles: list[str]) -> bool:
+        """Évite les faux positifs en imposant des frontières de mot pour les mots-clés courts."""
+        for mot in mots_cles:
+            mot_lower = mot.lower()
+            if len(mot_lower) <= 2:
+                if re.search(rf"\\b{re.escape(mot_lower)}\\b", texte):
+                    return True
+            else:
+                if mot_lower in texte:
+                    return True
+        return False
     
     # D'ABORD : vérifier si c'est une Zener (avant de vérifier diode normale)
     # Être STRICT : seulement les vrais indicateurs Zener
     keywords_zener = ["zener", "vz", "tension zener", "mode inverse", "conduction inverse"]
-    is_zener = any(kw in question_lower for kw in keywords_zener)
+    is_zener = contient_un_mot_cle(question_lower, keywords_zener)
     
     # Mots-clés pour circuit à diode (priorité très haute)
     keywords_diode = [
@@ -87,22 +102,47 @@ def detecter_type_probleme(question: str) -> str:
     # Mots-clés pour diviseur de tension
     keywords_diviseur = ["diviseur", "résistif", "r1", "r2"]
     
-    # Ordre de priorité : diode (avec distinction zener) > inverseur > transistor > diviseur > general
-    if any(kw in question_lower for kw in keywords_diode):
+    # Mots-clés pour puissance dans une maille résistive série
+    keywords_puissance_serie = [
+        "puissance", "absorbée", "absorbee", "fournie", "fournie par vin",
+        "une seule maille", "maille", "u=ri", "p=ui", "source de tension",
+        "résistances en série", "resistances en serie"
+    ]
+
+    # Mots-clés pour puissance avec source de courant et résistances en parallèle
+    keywords_puissance_parallele = [
+        "source de courant", "i0", "i_0", "courant source",
+        "parallèle", "parallel", "en parallèle", "resistances en parallele",
+        "exercice_4.2", "exercice 4.2"
+    ]
+
+    # Mots-clés pour puissance avec deux sources de tension et une résistance
+    keywords_puissance_deux_sources = [
+        "deux sources", "v1", "v2", "source v1", "source v2",
+        "trois puissances", "qui absorbe", "qui fournit",
+        "sources de tension", "séparées par une résistance", "separees par une resistance"
+    ]
+    
+    # Ordre de priorité : diode > inverseur > puissance parallèle/série > transistor > diviseur > general
+    if contient_un_mot_cle(question_lower, keywords_diode):
         if is_zener:
             # Zener : toujours en mode SIMPLE (boîtes noires trop compliqué)
             return "diode_zener_simple"
-        else:
-            # Sous-distinction pour diode ordinaire : boîtes noires vs simple
-            if any(kw in question_lower for kw in keywords_diode_boites):
-                return "diode_boites"
-            else:
-                return "diode_simple"
-    elif any(kw in question_lower for kw in keywords_inverseur):
+        # Sous-distinction pour diode ordinaire : boîtes noires vs simple
+        if contient_un_mot_cle(question_lower, keywords_diode_boites):
+            return "diode_boites"
+        return "diode_simple"
+    elif contient_un_mot_cle(question_lower, keywords_inverseur):
         return "inverseur"
-    elif any(kw in question_lower for kw in keywords_transistor):
+    elif contient_un_mot_cle(question_lower, keywords_puissance_deux_sources):
+        return "puissance_deux_sources"
+    elif contient_un_mot_cle(question_lower, keywords_puissance_parallele):
+        return "puissance_parallele"
+    elif contient_un_mot_cle(question_lower, keywords_puissance_serie):
+        return "puissance_serie"
+    elif contient_un_mot_cle(question_lower, keywords_transistor):
         return "transistor"
-    elif any(kw in question_lower for kw in keywords_diviseur):
+    elif contient_un_mot_cle(question_lower, keywords_diviseur):
         return "diviseur"
     else:
         return "general"
@@ -116,6 +156,57 @@ def expliquer_diviseur_tension(question: str, image_base64: str = None) -> str:
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=300,
+        messages=[
+            {"role": "user", "content": content}
+        ]
+    )
+
+    return response.content[0].text.strip()
+
+def expliquer_puissance_serie(question: str, image_base64: str = None) -> str:
+    """Analyse d'une maille unique avec résistances en série et calculs de puissance."""
+    image_info = "Si une image du circuit a été fournie, utilise-la pour valider ton analyse." if image_base64 else ""
+    prompt = PROMPT_PUISSANCE_SERIE.format(question=question, image_info=image_info)
+
+    content = construire_message_avec_image(prompt, image_base64)
+    
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=700,
+        messages=[
+            {"role": "user", "content": content}
+        ]
+    )
+
+    return response.content[0].text.strip()
+
+def expliquer_puissance_parallele(question: str, image_base64: str = None) -> str:
+    """Analyse source de courant avec deux résistances en parallèle et calculs de puissance."""
+    image_info = "Si une image du circuit a été fournie, utilise-la pour valider ton analyse." if image_base64 else ""
+    prompt = PROMPT_PUISSANCE_PARALLELE.format(question=question, image_info=image_info)
+
+    content = construire_message_avec_image(prompt, image_base64)
+    
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=700,
+        messages=[
+            {"role": "user", "content": content}
+        ]
+    )
+
+    return response.content[0].text.strip()
+
+def expliquer_puissance_deux_sources(question: str, image_base64: str = None) -> str:
+    """Analyse d'une maille avec deux sources de tension et une résistance, avec bilan de puissance."""
+    image_info = "Si une image du circuit a été fournie, utilise-la pour valider ton analyse." if image_base64 else ""
+    prompt = PROMPT_PUISSANCE_DEUX_SOURCES.format(question=question, image_info=image_info)
+
+    content = construire_message_avec_image(prompt, image_base64)
+
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=800,
         messages=[
             {"role": "user", "content": content}
         ]
@@ -169,6 +260,12 @@ def expliquer_probleme(question: str, image_base64: str = None) -> str:
         reponse = expliquer_inverseur_bipolaire(question, image_base64)
     elif type_probleme == "transistor":
         reponse = expliquer_transistor_bipolaire(question, image_base64)
+    elif type_probleme == "puissance_deux_sources":
+        reponse = expliquer_puissance_deux_sources(question, image_base64)
+    elif type_probleme == "puissance_parallele":
+        reponse = expliquer_puissance_parallele(question, image_base64)
+    elif type_probleme == "puissance_serie":
+        reponse = expliquer_puissance_serie(question, image_base64)
     elif type_probleme == "diviseur":
         reponse = expliquer_diviseur_tension(question, image_base64)
     else:

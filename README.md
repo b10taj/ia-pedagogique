@@ -6,6 +6,9 @@ Une application interactive basée sur l'IA pour résoudre des exercices d'élec
 
 ### 🔍 Détection Automatique de Problèmes
 - **Diviseur de tension** : formules clés, démarche, résultat numérique
+- **Maille résistive série avec puissance** : courant, tensions, puissances absorbées et fournie
+- **Source de courant avec résistances en parallèle** : tensions de branche, courants de branche, puissances absorbées et fournie
+- **Deux sources de tension + une résistance** : calcul des trois puissances et identification fourniture/absorption
 - **Transistor bipolaire** : régimes, paramètres clés, calculs détaillés
 - **Inverseur bipolaire** : 3 régimes, transitions, pente, courbe VOUT=f(VIN)
 - **Circuit à diode** : 2 types d'analyse (simple avec R+D explicites, ou boîtes noires X/Y indéterminées)
@@ -83,6 +86,15 @@ L'application s'ouvre à `http://localhost:8501`
 **Diviseur de tension :**
 > Calculer la tension de sortie Vout d'un diviseur avec R1=1kΩ, R2=2kΩ et Vin=12V.
 
+**Puissances dans une maille série :**
+> On considère une seule maille composée d'une source $V_{IN}=10\,V$, puis de deux résistances $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
+
+**Puissances avec source de courant en parallèle :**
+> Source de courant $I_0=1\,mA$ en parallèle avec $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
+
+**Puissances avec deux sources de tension :**
+> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2\,V$ et $V_2=5\,V$ séparées par une résistance $R=1\,k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
+
 **Transistor bipolaire :**
 > Un transistor BJT NPN avec β=100, Vbe=0.7V, Ic=2mA. Calculer Ib et Vce si Vcc=10V et Rc=2kΩ.
 
@@ -111,7 +123,9 @@ L'application s'ouvre à `http://localhost:8501`
 detecter_type_probleme(question)
 ```
 Analyse les mots-clés pour identifier :
-- Inverseur (haute priorité)
+- Diode (simple / boîtes noires / zener simple)
+- Inverseur bipolaire
+- Puissance (deux sources / parallèle / série)
 - Transistor bipolaire
 - Diviseur de tension
 - Problème général
@@ -120,8 +134,12 @@ Analyse les mots-clés pour identifier :
 - `expliquer_diviseur_tension()` : prompt 300 tokens
 - `expliquer_transistor_bipolaire()` : prompt 600 tokens
 - `expliquer_inverseur_bipolaire()` : prompt 1500 tokens
+- `expliquer_puissance_serie()` : prompt 700 tokens
+- `expliquer_puissance_parallele()` : prompt 700 tokens
+- `expliquer_puissance_deux_sources()` : prompt 800 tokens
 - `expliquer_diode_simple()` : prompt 1500 tokens (R et D explicites)
 - `expliquer_diode_boites()` : prompt 2400 tokens (boîtes noires X, Y indéterminées)
+- `expliquer_diode_zener_simple()` : prompt 3500 tokens
 - `expliquer_probleme_general()` : prompt 300 tokens
 
 ### Traçage
@@ -231,7 +249,7 @@ Le système détecte automatiquement le **type d'exercice diode** :
 ## ⚙️ Limitations Actuelles
 
 - Ne valide pas automatiquement les résultats
-- Pas de historique de conversations
+- Pas de validation symbolique automatique des conventions de signe (surtout sur exercices de puissance avancés)
 - Limité aux types d'exercices détectés
 - Pas de sauvegarde des résultats
 
