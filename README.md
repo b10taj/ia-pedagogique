@@ -87,13 +87,13 @@ L'application s'ouvre à `http://localhost:8501`
 > Calculer la tension de sortie Vout d'un diviseur avec R1=1kΩ, R2=2kΩ et Vin=12V.
 
 **Puissances dans une maille série :**
-> On considère une seule maille composée d'une source $V_{IN}=10\,V$, puis de deux résistances $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
+> On considère une seule maille composée d'une source $V_{IN}=10V$, puis de deux résistances $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
 
 **Puissances avec source de courant en parallèle :**
-> Source de courant $I_0=1\,mA$ en parallèle avec $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
+> Source de courant $I_0=1mA$ en parallèle avec $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
 
 **Puissances avec deux sources de tension :**
-> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2\,V$ et $V_2=5\,V$ séparées par une résistance $R=1\,k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
+> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2V$ et $V_2=5V$ séparées par une résistance $R=1k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
 
 **Transistor bipolaire :**
 > Un transistor BJT NPN avec β=100, Vbe=0.7V, Ic=2mA. Calculer Ib et Vce si Vcc=10V et Rc=2kΩ.
