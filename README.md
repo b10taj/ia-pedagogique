@@ -90,6 +90,17 @@ streamlit run app.py
 ### Exercice 3 (Thevenin)
 "R1=1k, R2=2k, R3=1k, C=20nF, R2 en parallele avec C, signal carre 0 a 5V, T=1ms."
 
+### Exercices puissance couverts
+
+**Puissances dans une maille série :**
+> On considère une seule maille composée d'une source $V_{IN}=10V$, puis de deux résistances $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
+
+**Puissances avec source de courant en parallèle :**
+> Source de courant $I_0=1mA$ en parallèle avec $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
+
+**Puissances avec deux sources de tension :**
+> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2V$ et $V_2=5V$ séparées par une résistance $R=1k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
+
 ## Architecture
 
 ```text
