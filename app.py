@@ -3,8 +3,44 @@ import streamlit as st
 import base64
 from io import BytesIO
 from PIL import ImageGrab
-from main import expliquer_probleme, detecter_type_probleme, tracer_inverseur
+from main import (
+    expliquer_probleme,
+    detecter_type_probleme,
+    extraire_parametres_passe_bas_premier_ordre,
+    extraire_parametres_signal_carre_rc,
+    extraire_parametres_thevenin_rc_signal_carre,
+    tracer_inverseur,
+    tracer_passe_bas_premier_ordre,
+    tracer_signal_carre_rc,
+    tracer_thevenin_rc_signal_carre,
+)
 from anthropic import Anthropic
+
+DEFAULT_RC_PARAMS = {
+    "resistance": 1000.0,
+    "capacite": 1e-6,
+    "vin_initial": 0.0,
+    "vin_final": 5.0,
+}
+
+DEFAULT_RC_CARRE_PARAMS = {
+    "r1": 1000.0,
+    "r2": 4000.0,
+    "capacite": 20e-9,
+    "periode": 2e-3,
+    "v_bas": 1.0,
+    "v_haut": 6.0,
+}
+
+DEFAULT_THEVENIN_RC_PARAMS = {
+    "r1": 1000.0,
+    "r2": 2000.0,
+    "r3": 1000.0,
+    "capacite": 20e-9,
+    "periode": 1e-3,
+    "v_bas": 0.0,
+    "v_haut": 5.0,
+}
 
 # Initialiser le client Anthropic
 client = Anthropic()
@@ -18,6 +54,10 @@ if "image_base64" not in st.session_state:
     st.session_state.image_base64 = None
 if "circuit_type" not in st.session_state:
     st.session_state.circuit_type = None
+if "plot_type" not in st.session_state:
+    st.session_state.plot_type = None
+if "plot_params" not in st.session_state:
+    st.session_state.plot_params = None
 
 # Section pour charger une image optionnelle
 st.write("### 📸 Circuit (optionnel)")
@@ -67,6 +107,14 @@ if st.session_state.circuit_type:
         st.info("🔍 Type détecté : **Circuit à Diode (Boîtes Noires)**")
     elif st.session_state.circuit_type == "inverseur":
         st.info("🔍 Type détecté : **Inverseur Bipolaire**")
+    elif st.session_state.circuit_type == "premier_ordre_passe_bas":
+        st.info("🔍 Type détecté : **Filtre Passe-Bas RC du Premier Ordre**")
+    elif st.session_state.circuit_type == "premier_ordre_signal_carre":
+        st.info("🔍 Type détecté : **RC du Premier Ordre - Signal Carré**")
+    elif st.session_state.circuit_type == "premier_ordre_signal_carre_crete":
+        st.info("🔍 Type détecté : **RC Signal Carré (Période Courte - Valeurs de Crête)**")
+    elif st.session_state.circuit_type == "thevenin_rc_signal_carre":
+        st.info("🔍 Type détecté : **RC Thévenin — R1-(R2//C)-R3 signal carré**")
     elif st.session_state.circuit_type == "transistor":
         st.info("🔍 Type détecté : **Transistor Bipolaire**")
     elif st.session_state.circuit_type == "puissance_deux_sources":
@@ -79,6 +127,42 @@ if st.session_state.circuit_type:
         st.info("🔍 Type détecté : **Diviseur de Tension**")
     else:
         st.info("🔍 Type détecté : **Problème Général**")
+    st.write("---")
+
+if st.session_state.plot_type == "premier_ordre_passe_bas":
+    st.write("### 📈 Réponse temporelle")
+    params = st.session_state.plot_params or DEFAULT_RC_PARAMS
+    fig = tracer_passe_bas_premier_ordre(**params)
+    st.pyplot(fig)
+    if st.session_state.plot_params is None:
+        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R=1kΩ, C=1µF, VIN: 0V→5V).")
+    st.write("---")
+
+if st.session_state.plot_type == "premier_ordre_signal_carre":
+    st.write("### 📈 Réponse temporelle au signal carré")
+    params = st.session_state.plot_params or DEFAULT_RC_CARRE_PARAMS
+    fig = tracer_signal_carre_rc(**params)
+    st.pyplot(fig)
+    if st.session_state.plot_params is None:
+        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R1=1kΩ, R2=4kΩ, C=20nF, T=2ms, niveaux 1V/6V).")
+    st.write("---")
+
+if st.session_state.plot_type == "premier_ordre_signal_carre_crete":
+    st.write("### 📈 Réponse temporelle au signal carré")
+    params = st.session_state.plot_params or DEFAULT_RC_CARRE_PARAMS
+    fig = tracer_signal_carre_rc(**params)
+    st.pyplot(fig)
+    if st.session_state.plot_params is None:
+        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R1=1kΩ, R2=4kΩ, C=20nF, T=2ms, niveaux 1V/6V).")
+    st.write("---")
+
+if st.session_state.plot_type == "thevenin_rc_signal_carre":
+    st.write("### 📈 Réponse VOUT(t) après réduction Thévenin")
+    params = st.session_state.plot_params or DEFAULT_THEVENIN_RC_PARAMS
+    fig = tracer_thevenin_rc_signal_carre(**params)
+    st.pyplot(fig)
+    if st.session_state.plot_params is None:
+        st.caption("Paramètres non détectés automatiquement: tracé avec valeurs par défaut (R1=1kΩ, R2=2kΩ, R3=1kΩ, C=20nF, T=1ms, 0V/5V).")
     st.write("---")
 
 for i, message in enumerate(st.session_state.messages):
@@ -102,29 +186,58 @@ if st.button("Envoyer"):
     else:
         # Ajouter le message utilisateur à l'historique
         st.session_state.messages.append({"role": "user", "content": user_input})
+
+        # Détection à chaque nouveau message pour activer le tracé si l'utilisateur enchaîne plusieurs questions.
+        type_detecte = detecter_type_probleme(user_input)
+        if type_detecte == "premier_ordre_passe_bas":
+            st.session_state.circuit_type = type_detecte
+            st.session_state.plot_type = "premier_ordre_passe_bas"
+            st.session_state.plot_params = extraire_parametres_passe_bas_premier_ordre(user_input)
+        elif type_detecte == "premier_ordre_signal_carre_crete":
+            st.session_state.circuit_type = type_detecte
+            st.session_state.plot_type = "premier_ordre_signal_carre_crete"
+            st.session_state.plot_params = extraire_parametres_signal_carre_rc(user_input)
+        elif type_detecte == "premier_ordre_signal_carre":
+            st.session_state.circuit_type = type_detecte
+            st.session_state.plot_type = "premier_ordre_signal_carre"
+            st.session_state.plot_params = extraire_parametres_signal_carre_rc(user_input)
+        elif type_detecte == "thevenin_rc_signal_carre":
+            st.session_state.circuit_type = type_detecte
+            st.session_state.plot_type = "thevenin_rc_signal_carre"
+            st.session_state.plot_params = extraire_parametres_thevenin_rc_signal_carre(user_input)
+        elif type_detecte != "general":
+            st.session_state.circuit_type = type_detecte
+            st.session_state.plot_type = None
+            st.session_state.plot_params = None
         
         # Déterminer si c'est la première question
         is_first_question = len([m for m in st.session_state.messages if m["role"] == "user"]) == 1
         
         if is_first_question:
             # Première question : détecter le type et utiliser le prompt spécialisé
-            st.session_state.circuit_type = detecter_type_probleme(user_input)
+            st.session_state.circuit_type = type_detecte
+            if st.session_state.circuit_type not in {"premier_ordre_passe_bas", "premier_ordre_signal_carre", "premier_ordre_signal_carre_crete", "thevenin_rc_signal_carre"}:
+                st.session_state.plot_type = None
+                st.session_state.plot_params = None
             response_text = expliquer_probleme(user_input, st.session_state.image_base64)
         else:
-            # Questions suivantes : continuer la conversation avec l'IA
-            # Préparer les messages pour l'API Anthropic
-            messages_for_api = [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ]
-            
-            response = client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=2000,
-                system="Tu es un assistant expert en électronique. Tu aides les étudiants à comprendre les circuits et les problèmes d'analyse. Sois clair, rigoureux et pédagogue.",
-                messages=messages_for_api
-            )
-            response_text = response.content[0].text.strip()
+            # Pour un nouvel énoncé spécialisé, on garde le routage spécialisé même après la première question.
+            if type_detecte != "general":
+                response_text = expliquer_probleme(user_input, st.session_state.image_base64)
+            else:
+                # Questions générales suivantes : continuer la conversation avec l'IA
+                messages_for_api = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ]
+
+                response = client.messages.create(
+                    model="claude-haiku-4-5",
+                    max_tokens=2000,
+                    system="Tu es un assistant expert en électronique. Tu aides les étudiants à comprendre les circuits et les problèmes d'analyse. Sois clair, rigoureux et pédagogue.",
+                    messages=messages_for_api
+                )
+                response_text = response.content[0].text.strip()
         
         # Ajouter la réponse à l'historique
         st.session_state.messages.append({"role": "assistant", "content": response_text})

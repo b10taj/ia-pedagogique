@@ -1,263 +1,170 @@
-# Assistant Électronique ⚡
+# Assistant Electronique
 
-Une application interactive basée sur l'IA pour résoudre des exercices d'électronique. Détecte automatiquement le type de problème et fournit une explication structurée avec formules, méthode de résolution et résultats numériques.
+Application Streamlit qui assiste la resolution d'exercices d'electronique (analyse guidee + traces automatiques), avec detection automatique du type d'enonce et routage vers des prompts specialises.
 
-## ✨ Fonctionnalités
+## Fonctionnalites
 
-### 🔍 Détection Automatique de Problèmes
-- **Diviseur de tension** : formules clés, démarche, résultat numérique
-- **Maille résistive série avec puissance** : courant, tensions, puissances absorbées et fournie
-- **Source de courant avec résistances en parallèle** : tensions de branche, courants de branche, puissances absorbées et fournie
-- **Deux sources de tension + une résistance** : calcul des trois puissances et identification fourniture/absorption
-- **Transistor bipolaire** : régimes, paramètres clés, calculs détaillés
-- **Inverseur bipolaire** : 3 régimes, transitions, pente, courbe VOUT=f(VIN)
-- **Circuit à diode** : 2 types d'analyse (simple avec R+D explicites, ou boîtes noires X/Y indéterminées)
-- **Problèmes généraux** : assistant flexible pour d'autres circuits
+### Detection automatique des exercices
+- Diode silicium simple
+- Diode en boites noires (X/Y)
+- Diode Zener simple
+- Inverseur bipolaire
+- Transistor bipolaire
+- Diviseur de tension
+- Exercices de puissance (serie, parallele, deux sources)
+- RC premier ordre passe-bas (saut simple ou deux sauts)
+- RC premier ordre sous signal carre
+- RC signal carre en regime de cretes (periode courte)
+- RC avec reduction de Thevenin : R1-(R2 // C)-R3
+- Fallback probleme general
 
-### 📐 Formatage Automatique LaTeX
-Tous les paramètres mathématiques sont **automatiquement formatés en LaTeX** :
-- `V_OUT` → $V_{OUT}$ (indice visible)
-- `I_D` → $I_D$ (indice visible)
-- `V_BE` → $V_{BE}$ (indice visible)
-- `R_C` → $R_C$ (indice visible)
-- Toutes les formules affichées avec indices propres
+### Explications pedagogiques
+- Demarche pas a pas
+- Equations et substitutions numeriques
+- Verification physique des resultats
+- Conclusion synthetique
+- Formatage LaTeX dans les reponses
 
-### 📊 Tracé Automatique pour Inverseurs
-- Génération de la courbe VOUT = f(VIN)
-- Zones colorées (bloquée, active, saturée)
-- Paramètres ajustables (VCC, RC, RB, β, VBE, VCE_sat)
-- Marquage automatique des transitions
+### Traces automatiques (matplotlib)
+- Courbe VOUT=f(VIN) pour inverseur bipolaire
+- Reponse temporelle RC passe-bas (1 saut ou 2 sauts)
+- Reponse RC a signal carre
+- Reponse RC Thevenin (VIN, Vth et Vout)
 
-### 💡 Explications Complètes
-- Décomposition étape par étape
-- Formules et équations utilisées
-- Calculs numériques détaillés
-- Explications intuitives
-- Résumé synthétisé final
+## Installation
 
-## 🚀 Installation
-
-### Prérequis
+### Prerequis
 - Python 3.8+
-- Clé API Anthropic (A retrouver sur [console.anthropic.com](https://console.anthropic.com))
+- Cle API Anthropic
 
-### Étapes
-
-1. **Cloner le repo**
+### Etapes
+1. Cloner le repository
 ```bash
 git clone <repo_url>
 cd Codes
 ```
 
-2. **Créer un environnement virtuel**
+2. Creer et activer l'environnement virtuel
 ```bash
 python -m venv .venv
-.venv\Scripts\Activate.ps1  # Windows PowerShell
-source .venv/bin/activate   # macOS/Linux
+.venv\Scripts\Activate.ps1
 ```
 
-3. **Installer les dépendances**
+3. Installer les dependances
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Configurer la clé API**
-Créer un fichier `.env` à la racine :
-```
+4. Configurer la cle API
+Creer un fichier `.env` a la racine :
+```env
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-5. **Lancer l'application**
+5. Lancer l'application
 ```bash
 streamlit run app.py
 ```
 
-L'application s'ouvre à `http://localhost:8501`
+## Utilisation
 
-## 📖 Utilisation
+1. Saisir un enonce dans l'interface
+2. Cliquer sur Envoyer
+3. L'assistant detecte le type de probleme
+4. Lire l'explication et, si applicable, le trace genere automatiquement
 
-### Interface Simple
-1. Posez votre question sur un circuit électronique
-2. Cliquez sur **"Expliquer"**
-3. L'IA détecte le type et fournit une réponse structurée
+## Exemples d'enonces RC couverts
 
-### Exemples de Questions
+### Exercice 1.a (passe-bas, saut unique)
+"R=1kOhm, C=1uF, Vin passe de 1V a 6V a t=0."
 
-**Diviseur de tension :**
-> Calculer la tension de sortie Vout d'un diviseur avec R1=1kΩ, R2=2kΩ et Vin=12V.
+### Exercice 1.b (deux sauts)
+"R=1kOhm, C=1uF, saut de -5V a t=0 puis saut de +5V a t=10ms."
 
-**Puissances dans une maille série :**
-> On considère une seule maille composée d'une source $V_{IN}=10\,V$, puis de deux résistances $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
+### Exercice 2.a (signal carre, charge/decharge complete)
+"R1=1kOhm, R2=4kOhm, C=20nF, signal carre de periode T=2ms, niveau bas 1V, niveau haut 6V."
 
-**Puissances avec source de courant en parallèle :**
-> Source de courant $I_0=1\,mA$ en parallèle avec $R_1=1\,k\Omega$ et $R_2=4\,k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
+### Exercice 2.b (signal carre, regime de cretes)
+"Meme circuit RC, periode tres courte, calculer Vmax, Vmin et l'ondulation."
 
-**Puissances avec deux sources de tension :**
-> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2\,V$ et $V_2=5\,V$ séparées par une résistance $R=1\,k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
+### Exercice 3 (Thevenin)
+"R1=1k, R2=2k, R3=1k, C=20nF, R2 en parallele avec C, signal carre 0 a 5V, T=1ms."
 
-**Transistor bipolaire :**
-> Un transistor BJT NPN avec β=100, Vbe=0.7V, Ic=2mA. Calculer Ib et Vce si Vcc=10V et Rc=2kΩ.
+## Architecture
 
-**Inverseur bipolaire :**
-> Analyse d'un inverseur bipolaire. Transistor NPN, β=200, Vcc=5V, Rc=2kΩ, Rb=10kΩ. Dessiner la courbe VOUT=f(VIN), calculer la pente et les tensions limites.
-
-**Circuit à diode :**
-> **Type 1 - Simple :** Analyse un circuit à diode D et résistance R=1kΩ. La diode est en série avec R entre VIN et la masse. Examine tous les cas de montage (R-D ou D-R) et polarité (VIN = ±5V).
-
-> **Type 2 - Boîtes noires :** [Schéma fourni avec X et Y]. Sachant que X et Y peuvent être une diode au silicium et une résistance (dans l'un des deux ordres possibles), analyser tous les cas. VIN = ±5V, diode en 2 orientations.
-
-## 🏗️ Architecture
-
-### Fichiers Principaux
-
-```
+```text
 .
-├── app.py              # Interface Streamlit
-├── main.py             # Logique IA et traçage
-├── .env                # Configuration (clé API)
-└── .venv/              # Environnement virtuel
+|- app.py
+|- main.py
+|- prompts/
+|  |- passive.py
+|  |- diodes.py
+|  |- diode_zener.py
+|  |- transistor.py
+|  |- general.py
 ```
 
-### Fonction de Détection
-```python
-detecter_type_probleme(question)
-```
-Analyse les mots-clés pour identifier :
-- Diode (simple / boîtes noires / zener simple)
-- Inverseur bipolaire
-- Puissance (deux sources / parallèle / série)
-- Transistor bipolaire
-- Diviseur de tension
-- Problème général
+### Fichiers
+- `app.py` : interface Streamlit, session state, affichage des traces
+- `main.py` : detection, extraction de parametres, appels IA, traceurs
+- `prompts/passive.py` : prompts RC, puissance, diviseur
 
-### Assistants Spécialisés
-- `expliquer_diviseur_tension()` : prompt 300 tokens
-- `expliquer_transistor_bipolaire()` : prompt 600 tokens
-- `expliquer_inverseur_bipolaire()` : prompt 1500 tokens
-- `expliquer_puissance_serie()` : prompt 700 tokens
-- `expliquer_puissance_parallele()` : prompt 700 tokens
-- `expliquer_puissance_deux_sources()` : prompt 800 tokens
-- `expliquer_diode_simple()` : prompt 1500 tokens (R et D explicites)
-- `expliquer_diode_boites()` : prompt 2400 tokens (boîtes noires X, Y indéterminées)
-- `expliquer_diode_zener_simple()` : prompt 3500 tokens
-- `expliquer_probleme_general()` : prompt 300 tokens
+### Routage principal
+`detecter_type_probleme(question)`
 
-### Traçage
-```python
-tracer_inverseur(vcc, rc, rb, beta, vbe, vce_sat)
-```
-Génère la courbe de transfert avec matplotlib et Streamlit.
+Ordre de priorite actuel (resume) :
+1. Diodes
+2. RC signal carre cretes
+3. RC Thevenin
+4. RC signal carre
+5. RC passe-bas
+6. Inverseur / puissance / transistor / diviseur
+7. General
 
-## 💰 Coûts API
+## Fonctions cle ajoutees pour RC
 
-**Modèle utilisé :** Claude Haiku 4.5 (le plus économique)
+### Explication IA
+- `expliquer_premier_ordre_passe_bas()`
+- `expliquer_premier_ordre_signal_carre()`
+- `expliquer_premier_ordre_signal_carre_crete()`
+- `expliquer_thevenin_rc_signal_carre()`
 
-- **Output tokens :** $4.00 par 1M tokens
-- **Une réponse type :** ~0.0002¢
-- **1000 réponses :** ~$0.02
+### Extraction de parametres
+- `extraire_parametres_passe_bas_premier_ordre()`
+- `extraire_parametres_signal_carre_rc()`
+- `extraire_parametres_thevenin_rc_signal_carre()`
 
-Très économique pour un usage étudiant ! 💚
+Gestion des unites/préfixes : `k`, `m`, `u`, `micro`, `n`, `nano`, `p`, `meg`.
 
-## 🔧 Types d'Exercices sur les Diodes
+### Traceurs
+- `tracer_passe_bas_premier_ordre()`
+- `tracer_signal_carre_rc()`
+- `tracer_thevenin_rc_signal_carre()`
 
-Le système détecte et traite **2 types distincts** d'exercices diode :
+## Corrections techniques importantes
 
-### Type 1️⃣ : Diode Simple (R et D Explicites)
-**Situation :** Circuit avec une résistance R et une diode D au silicium entre VIN et la masse.
+### Nettoyage de code non desire dans les reponses IA
+- Ajout d'un filtre backend `nettoyer_reponse_sans_code()` pour supprimer blocs ```...``` et imports parasites.
 
-**Variables :**
-- **Ordre des éléments** (2 cas) : R-D ou D-R
-- **Orientation de la diode** (2 cas) : normal (anode vers VIN) ou inverse
-- **Polarité de VIN** (2 cas) : positive ou négative
-- **Total : 2 × 2 × 2 = 8 cas à analyser**
+### Correction regex mots-cles courts
+- Correction de l'usage de `\b` avec `re.escape(...)` pour eviter les faux positifs/faux negatifs.
 
-**Analyse :** Pour chaque configuration, déterminer l'état de la diode (conduction : Vd ≈ 0.7V ou blocage : Id = 0), les courants et tensions.
+### Correction parsing unites
+- Ajout de la prise en charge explicite de `micro` et `nano` dans les extracteurs.
 
-**Mots-clés de détection :** "R et D", "R puis D", "D puis R", "configuration"
+### Correction bug de formatage des prompts (critique)
+- Erreur resolue : `KeyError: '-t/\\tau'` due aux accolades LaTeX non echappees lors de `.format()`.
+- Solution : doubles accolades pour les blocs LaTeX litteraux dans les prompts.
 
----
+## Limites actuelles
+- Pas de verification symbolique formelle
+- Pas d'export PDF/PNG integre
+- Pas d'historique persistant des conversations
 
-### Type 2️⃣ : Boîtes Noires Indéterminées (X et Y)
-**Situation :** Schéma fourni avec deux boîtes noires (X et Y) qui peuvent être :
-- Configuration 1 : X = Diode au silicium, Y = Résistance
-- Configuration 2 : X = Résistance, Y = Diode au silicium
-
-**Variables (par configuration) :**
-- **Type d'élément** (2 cas) : X=D/Y=R ou X=R/Y=D
-- **Orientation de la diode** (2 cas) : normal ou inverse
-- **Polarité de VIN** (2 cas) : positive ou négative
-- **Total : 2 configurations × 2 orientations × 2 polarités = 8 cas par paire**
-
-**Analyse :** Déterminer quels éléments sont X et Y, puis analyser tous les régimes de fonctionnement.
-
-**Mots-clés de détection :** "boîte noire", "boîtes noires", "X et Y", "indéterminé"
-
----
-
-## 🔧 Configuration Avancée
-
-### Stratégie de Détection des Diodes
-
-Le système détecte automatiquement le **type d'exercice diode** :
-
-1. **Présence de mots-clés diode** : "diode", "silicium", "anode", "cathode", "redressement"
-2. **Sous-distinction :**
-   - Contient "boîte noire", "boîtes noires", "X et Y" → **Type 2 (boîtes noires)**
-   - Sinon → **Type 1 (simple R+D explicites)**
-3. **Ordre de priorité global** : Diode > Inverseur > Transistor > Diviseur > Général
-
-### Ajouter un nouveau type d'exercice
-1. Ajouter des mots-clés dans `detecter_type_probleme()`
-2. Créer une fonction `expliquer_nouveau_type()`
-3. Ajouter le cas dans `expliquer_probleme()`
-4. Mettre à jour `app.py` pour l'affichage
-
-## 📊 Exemple de Sortie
-
-### Pour un inverseur bipolaire :
-
-✅ **Explication complète :**
-- Régimes de fonctionnement avec équations
-- Calculs numériques détaillés
-- Transitions : VIN₁ = 0.7V, VIN₂ ≈ 0.82V
-- Pente : -40 V/V
-- Résumé des 3 zones
-
-✅ **Courbe automatique :**
-- Tracé VOUT vs VIN
-- Zones colorées
-- Transitions marquées
-
-### Pour un circuit à diode :
-
-**Type 1 - Simple :**
-✅ **Analyse des 8 cas** (4 configurations × 2 polarités)
-- Configuration : ordre (R-D ou D-R) + orientation (normal/inverse)
-- Pour chaque cas + VIN (±) : état de la diode (conduction/blocage)
-- Calculs : Id, Vd, VR, V_OUT
-- Tableau récapitulatif final
-
-**Type 2 - Boîtes noires :**
-✅ **Analyse des 2 configurations principales** (chacune × 2 orientations × 2 polarités = 8 cas)
-- Configuration A : X = Diode, Y = Résistance
-- Configuration B : X = Résistance, Y = Diode
-- Pour chaque : tous les cas (direct/reverse, ± polarité)
-- Tableau final : Id, Vd, V_OUT cohérent
-- Tableau récapitulatif avec tous les cas
-- État final : conducting/blocking/reverse-blocking
-
-## ⚙️ Limitations Actuelles
-
-- Ne valide pas automatiquement les résultats
-- Pas de validation symbolique automatique des conventions de signe (surtout sur exercices de puissance avancés)
-- Limité aux types d'exercices détectés
-- Pas de sauvegarde des résultats
-
-## 🚧 Améliorations Futures
-
-- [ ] Cache des réponses récurrentes
-- [ ] Export PNG/PDF des courbes
-- [ ] Historique de conversations
+## Pistes d'amelioration
+- Ajouter une suite de tests unitaires pour les extracteurs regex
+- Ajouter des tests de non-regression sur la detection de type
+- Ajouter export de courbes et rapport automatique
 - [ ] Upload d'image de circuit pour analyse automatique
 - [ ] Support amplificateur à émetteur commun
 - [ ] Support redresseurs à diodes multiples
