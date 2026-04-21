@@ -1,6 +1,7 @@
 # main.py
 import os
 import re
+import unicodedata
 import numpy as np
 import matplotlib.pyplot as plt
 from anthropic import Anthropic
@@ -431,9 +432,27 @@ def expliquer_probleme(question: str, image_base64: str = None) -> str:
     
     return reponse
 
-def extraire_parametres_passe_bas_premier_ordre(question: str) -> dict | None:
-    """Extrait les paramètres usuels d'un exercice RC du premier ordre."""
-    texte = question.lower().replace(",", ".")
+
+def normaliser_texte_rc(question: str) -> str:
+    """Normalise les énoncés RC copiés depuis PDF/Word avec symboles et indices éclatés."""
+    texte = unicodedata.normalize("NFKC", question)
+    texte = texte.lower().replace(",", ".")
+    texte = texte.replace("‑", "-").replace("–", "-")
+    texte = re.sub(r"\s+", " ", texte)
+
+    # Recoller les variables souvent éclatées par les copier-coller de PDF.
+    texte = re.sub(r"\b([rcvt])\s+(\d)\b", r"\1\2", texte)
+    texte = re.sub(r"\bv\s+out\b", "vout", texte)
+    texte = re.sub(r"\bv\s+in\b", "vin", texte)
+    texte = re.sub(r"\b([rcvt]|vin|vout)\s*\(\s*t\s*\)", lambda m: m.group(0).replace(" ", ""), texte)
+
+    # Uniformiser les espaces autour de = sans coller tout le texte.
+    texte = re.sub(r"\s*=\s*", "=", texte)
+    return texte
+
+def extraire_parametres_rc(question: str, mode: str) -> dict | None:
+    """Extrait les paramètres des différents exercices RC via une implémentation unique."""
+    texte = normaliser_texte_rc(question)
 
     def convertir_prefixe(valeur: float, prefixe: str | None) -> float:
         multiplicateurs = {
@@ -450,206 +469,182 @@ def extraire_parametres_passe_bas_premier_ordre(question: str) -> dict | None:
         }
         return valeur * multiplicateurs.get(prefixe or "", 1.0)
 
-    resistance_match = re.search(
-        r"\br\s*=\s*(\d+(?:\.\d+)?)\s*(meg|k|m|u|µ|n|p)?\s*(?:ohms?|Ω)?",
-        texte,
-    )
-    capacite_match = re.search(
-        r"\bc\s*=\s*(\d+(?:\.\d+)?)\s*(micro|nano|meg|k|m|u|µ|n|p)?\s*(?:f|farad|farads)?",
-        texte,
-    )
+    def extraire_valeur(prefixes: list[str], unites: list[str]) -> float | None:
+        pattern_prefixes = "|".join(re.escape(p) for p in prefixes)
+        pattern_unites = "|".join(re.escape(u) for u in unites)
+        match = re.search(
+            rf"(?:{pattern_prefixes})\s*=\s*(\d+(?:\.\d+)?)\s*(micro|nano|meg|k|m|u|µ|n|p)?\s*(?:{pattern_unites})?",
+            texte,
+        )
+        if not match:
+            return None
+        return convertir_prefixe(float(match.group(1)), match.group(2))
 
-    if not resistance_match or not capacite_match:
-        return None
+    def extraire_periode() -> float | None:
+        periode_match = re.search(
+            r"p(?:é|e)riode(?:\s+du\s+signal\s+carr(?:é|e)|\s+du\s+signal\s+carre)?\s*(?:vaut|=)?\s*(\d+(?:\.\d+)?)\s*(ms|s|us|µs)",
+            texte,
+        )
+        if periode_match:
+            val = float(periode_match.group(1))
+            unite = periode_match.group(2)
+            if unite == "ms":
+                return val / 1000.0
+            if unite in ("us", "µs"):
+                return val / 1e6
+            return val
+        return extraire_valeur(["période", "periode", "t"], ["s", "ms", "us", "µs"])
 
-    resistance = convertir_prefixe(float(resistance_match.group(1)), resistance_match.group(2))
-    capacite = convertir_prefixe(float(capacite_match.group(1)), capacite_match.group(2))
+    def extraire_niveaux_signal() -> tuple[float | None, float | None]:
+        variant_match = re.search(
+            r"variant\s+de\s+(\-?\d+(?:\.\d+)?)\s*v?\s+[aà]\s+(\-?\d+(?:\.\d+)?)\s*v",
+            texte,
+        )
+        if variant_match:
+            return float(variant_match.group(1)), float(variant_match.group(2))
 
-    vin_initial = 0.0
-    vin_final = None
-    vin_final_2 = None
-    temps_second_saut = None
+        entre_match = re.search(
+            r"entre\s+(\-?\d+(?:\.\d+)?)\s*v?\s+et\s+(\-?\d+(?:\.\d+)?)\s*v",
+            texte,
+        )
+        if entre_match:
+            return float(entre_match.group(1)), float(entre_match.group(2))
 
-    initial_match = re.search(r"v(?:in)?\s*\(t\)?[^.\n]*?vaut\s*(\-?\d+(?:\.\d+)?)\s*v\s*avant le saut", texte)
-    if initial_match:
-        vin_initial = float(initial_match.group(1))
+        bas_match = re.search(
+            r"niveau\s+bas\s*(?:de|=|vaut)?\s*(\-?\d+(?:\.\d+)?)\s*v",
+            texte,
+        )
+        haut_match = re.search(
+            r"niveau\s+haut\s*(?:de|=|vaut)?\s*(\-?\d+(?:\.\d+)?)\s*v",
+            texte,
+        )
+        v_bas = float(bas_match.group(1)) if bas_match else None
+        v_haut = float(haut_match.group(1)) if haut_match else None
+        return v_bas, v_haut
 
-    initial_match_alt = re.search(r"v(?:in)?\s*\(t\)?[^.\n]*?val(?:ant|oir)\s*(\-?\d+(?:\.\d+)?)\s*v\s*avant le saut", texte)
-    if initial_match_alt:
-        vin_initial = float(initial_match_alt.group(1))
+    if mode == "passe_bas":
+        resistance = extraire_valeur(["r"], ["ohm", "ohms", "ω"])
+        capacite = extraire_valeur(["c"], ["f", "farad", "farads"])
+        if resistance is None or capacite is None:
+            return None
 
-    transition_match = re.search(
-        r"passe\s+de\s*(\-?\d+(?:\.\d+)?)\s*v\s+à\s*(\-?\d+(?:\.\d+)?)\s*v",
-        texte,
-    )
-    if transition_match:
-        vin_initial = float(transition_match.group(1))
-        vin_final = float(transition_match.group(2))
+        vin_initial = 0.0
+        vin_final = None
+        vin_final_2 = None
+        temps_second_saut = None
 
-    saut_match = re.search(r"saut\s+de\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-    if vin_final is None and saut_match:
-        vin_final = vin_initial + float(saut_match.group(1))
+        initial_match = re.search(r"v(?:in)?\s*\(t\)?[^.\n]*?vaut\s*(\-?\d+(?:\.\d+)?)\s*v\s*avant le saut", texte)
+        if initial_match:
+            vin_initial = float(initial_match.group(1))
 
-    sauts = [float(val) for val in re.findall(r"saut(?:\s+[a-zàâäéèêëîïôöùûüç]+){0,3}\s+de\s*([+\-]?\d+(?:\.\d+)?)\s*v", texte)]
-    if sauts and vin_final is None:
-        vin_final = vin_initial + sauts[0]
+        initial_match_alt = re.search(r"v(?:in)?\s*\(t\)?[^.\n]*?val(?:ant|oir)\s*(\-?\d+(?:\.\d+)?)\s*v\s*avant le saut", texte)
+        if initial_match_alt:
+            vin_initial = float(initial_match_alt.group(1))
 
-    if len(sauts) >= 2:
-        vin_final_2 = (vin_initial + sauts[0]) + sauts[1]
+        transition_match = re.search(
+            r"passe\s+de\s*(\-?\d+(?:\.\d+)?)\s*v\s+à\s*(\-?\d+(?:\.\d+)?)\s*v",
+            texte,
+        )
+        if transition_match:
+            vin_initial = float(transition_match.group(1))
+            vin_final = float(transition_match.group(2))
 
-    second_saut_temps_match = re.search(
-        r"(?:au bout de|apres|après|à\s*t\s*=|a\s*t\s*=)\s*(\d+(?:\.\d+)?)\s*(ms|s)",
-        texte,
-    )
-    if second_saut_temps_match:
-        valeur = float(second_saut_temps_match.group(1))
-        unite = second_saut_temps_match.group(2)
-        temps_second_saut = valeur / 1000.0 if unite == "ms" else valeur
+        saut_match = re.search(r"saut\s+de\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
+        if vin_final is None and saut_match:
+            vin_final = vin_initial + float(saut_match.group(1))
 
-    # Cas fréquent: "puis ... saut ..." sans précision explicite de vin_final_2
-    if vin_final_2 is None and len(sauts) >= 2 and vin_final is not None:
-        vin_final_2 = vin_final + sauts[1]
+        sauts = [float(val) for val in re.findall(r"saut(?:\s+[a-zàâäéèêëîïôöùûüç]+){0,3}\s+de\s*([+\-]?\d+(?:\.\d+)?)\s*v", texte)]
+        if sauts and vin_final is None:
+            vin_final = vin_initial + sauts[0]
 
-    if vin_final is None:
-        final_match = re.search(r"(?:après le saut|valeur finale)\s*(?:vaut|=)?\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-        if final_match:
-            vin_final = float(final_match.group(1))
+        if len(sauts) >= 2:
+            vin_final_2 = (vin_initial + sauts[0]) + sauts[1]
 
-    if vin_final is None:
-        return None
+        second_saut_temps_match = re.search(
+            r"(?:au bout de|apres|après|à\s*t\s*=|a\s*t\s*=)\s*(\d+(?:\.\d+)?)\s*(ms|s)",
+            texte,
+        )
+        if second_saut_temps_match:
+            valeur = float(second_saut_temps_match.group(1))
+            unite = second_saut_temps_match.group(2)
+            temps_second_saut = valeur / 1000.0 if unite == "ms" else valeur
 
-    return {
-        "resistance": resistance,
-        "capacite": capacite,
-        "vin_initial": vin_initial,
-        "vin_final": vin_final,
-        "temps_second_saut": temps_second_saut,
-        "vin_final_2": vin_final_2,
-    }
+        if vin_final_2 is None and len(sauts) >= 2 and vin_final is not None:
+            vin_final_2 = vin_final + sauts[1]
+
+        if vin_final is None:
+            final_match = re.search(r"(?:après le saut|valeur finale)\s*(?:vaut|=)?\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
+            if final_match:
+                vin_final = float(final_match.group(1))
+
+        if vin_final is None:
+            return None
+
+        return {
+            "resistance": resistance,
+            "capacite": capacite,
+            "vin_initial": vin_initial,
+            "vin_final": vin_final,
+            "temps_second_saut": temps_second_saut,
+            "vin_final_2": vin_final_2,
+        }
+
+    if mode == "signal_carre":
+        r1 = extraire_valeur(["r1"], ["ohm", "ohms", "ω"])
+        r2 = extraire_valeur(["r2"], ["ohm", "ohms", "ω"])
+        capacite = extraire_valeur(["c"], ["f", "farad", "farads"])
+        periode = extraire_periode()
+        v_bas, v_haut = extraire_niveaux_signal()
+
+        if None in (r1, r2, capacite, periode, v_bas, v_haut):
+            return None
+
+        return {
+            "r1": r1,
+            "r2": r2,
+            "capacite": capacite,
+            "periode": periode,
+            "v_bas": v_bas,
+            "v_haut": v_haut,
+        }
+
+    if mode == "thevenin_signal_carre":
+        r1 = extraire_valeur(["r1"], ["ohm", "ohms", "ω"])
+        r2 = extraire_valeur(["r2"], ["ohm", "ohms", "ω"])
+        r3 = extraire_valeur(["r3"], ["ohm", "ohms", "ω"])
+        capacite = extraire_valeur(["c"], ["f", "farad", "farads"])
+        periode = extraire_periode()
+        v_bas, v_haut = extraire_niveaux_signal()
+
+        if None in (r1, r2, r3, capacite, periode, v_bas, v_haut):
+            return None
+
+        return {
+            "r1": r1,
+            "r2": r2,
+            "r3": r3,
+            "capacite": capacite,
+            "periode": periode,
+            "v_bas": v_bas,
+            "v_haut": v_haut,
+        }
+
+    raise ValueError(f"Mode d'extraction RC inconnu: {mode}")
+
+
+def extraire_parametres_passe_bas_premier_ordre(question: str) -> dict | None:
+    """Extrait les paramètres usuels d'un exercice RC du premier ordre."""
+    return extraire_parametres_rc(question, mode="passe_bas")
+
 
 def extraire_parametres_signal_carre_rc(question: str) -> dict | None:
     """Extrait les paramètres d'un exercice RC soumis à un signal carré."""
-    texte = question.lower().replace(",", ".")
+    return extraire_parametres_rc(question, mode="signal_carre")
 
-    def extraire_valeur(prefixes: list[str], unites: list[str]) -> float | None:
-        pattern_prefixes = "|".join(re.escape(p) for p in prefixes)
-        pattern_unites = "|".join(re.escape(u) for u in unites)
-        m = re.search(rf"(?:{pattern_prefixes})\s*=\s*(\d+(?:\.\d+)?)\s*(micro|meg|k|m|u|µ|n|p)?\s*(?:{pattern_unites})?", texte)
-        if not m:
-            return None
-        val = float(m.group(1))
-        prefixe = m.group(2) or ""
-        scale = {
-            "": 1.0,
-            "micro": 1e-6,
-            "nano": 1e-9,
-            "k": 1e3,
-            "m": 1e-3,
-            "u": 1e-6,
-            "µ": 1e-6,
-            "n": 1e-9,
-            "p": 1e-12,
-            "meg": 1e6,
-        }
-        return val * scale.get(prefixe, 1.0)
-
-    r1 = extraire_valeur(["r1"], ["ohm", "ohms", "ω"])
-    r2 = extraire_valeur(["r2"], ["ohm", "ohms", "ω"])
-    c = extraire_valeur(["c"], ["f", "farad", "farads"])
-    t = extraire_valeur(["période", "periode", "t"], ["s", "ms", "us", "µs"])
-
-    # Si l'extraction de T via l'unité est ambiguë, on récupère explicitement "période vaut ..."
-    periode_match = re.search(r"période(?:\s+du\s+signal\s+carré|\s+du\s+signal\s+carre)?\s*(?:vaut|=)?\s*(\d+(?:\.\d+)?)\s*(ms|s|us|µs)", texte)
-    if periode_match:
-        val = float(periode_match.group(1))
-        u = periode_match.group(2)
-        if u == "ms":
-            t = val / 1000.0
-        elif u in ("us", "µs"):
-            t = val / 1e6
-        else:
-            t = val
-
-    bas_match = re.search(r"niveau\s+bas\s+(?:de|=)\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-    haut_match = re.search(r"niveau\s+haut\s+(?:de|=)\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-    v_bas = float(bas_match.group(1)) if bas_match else None
-    v_haut = float(haut_match.group(1)) if haut_match else None
-
-    if r1 is None or r2 is None or c is None or t is None or v_bas is None or v_haut is None:
-        return None
-
-    return {
-        "r1": r1,
-        "r2": r2,
-        "capacite": c,
-        "periode": t,
-        "v_bas": v_bas,
-        "v_haut": v_haut,
-    }
 
 def extraire_parametres_thevenin_rc_signal_carre(question: str) -> dict | None:
     """Extrait R1, R2, R3, C, T et les niveaux du signal pour l'exercice Thévenin RC."""
-    texte = question.lower().replace(",", ".")
-
-    def extraire_valeur(prefixes: list[str], unites: list[str]) -> float | None:
-        pattern_prefixes = "|".join(re.escape(p) for p in prefixes)
-        pattern_unites = "|".join(re.escape(u) for u in unites)
-        m = re.search(
-            rf"(?:{pattern_prefixes})\s*=\s*(\d+(?:\.\d+)?)\s*(micro|meg|k|m|u|µ|n|p)?\s*(?:{pattern_unites})?",
-            texte,
-        )
-        if not m:
-            return None
-        val = float(m.group(1))
-        prefixe = m.group(2) or ""
-        scale = {
-            "": 1.0, "micro": 1e-6, "nano": 1e-9, "k": 1e3, "m": 1e-3,
-            "u": 1e-6, "µ": 1e-6, "n": 1e-9, "p": 1e-12, "meg": 1e6,
-        }
-        return val * scale.get(prefixe, 1.0)
-
-    r1 = extraire_valeur(["r1"], ["ohm", "ohms", "ω"])
-    r2 = extraire_valeur(["r2"], ["ohm", "ohms", "ω"])
-    r3 = extraire_valeur(["r3"], ["ohm", "ohms", "ω"])
-    c  = extraire_valeur(["c"],  ["f", "farad", "farads"])
-
-    t = None
-    periode_match = re.search(
-        r"p\u00e9riode(?:\s+du\s+signal\s+carr\u00e9|\s+du\s+signal\s+carre)?\s*(?:vaut|=)?\s*(\d+(?:\.\d+)?)\s*(ms|s|us|\u00b5s)",
-        texte,
-    )
-    if periode_match:
-        val = float(periode_match.group(1))
-        u = periode_match.group(2)
-        t = val / 1000.0 if u == "ms" else (val / 1e6 if u in ("us", "µs") else val)
-    else:
-        t = extraire_valeur(["t"], ["s", "ms", "us", "µs"])
-
-    # Niveaux du signal carré
-    v_bas, v_haut = None, None
-    variant_match = re.search(
-        r"variant\s+de\s+(\-?\d+(?:\.\d+)?)\s*v?\s+[a\u00e0]\s+(\-?\d+(?:\.\d+)?)\s*v", texte
-    )
-    if variant_match:
-        v_bas  = float(variant_match.group(1))
-        v_haut = float(variant_match.group(2))
-    else:
-        entre_match = re.search(
-            r"entre\s+(\-?\d+(?:\.\d+)?)\s*v?\s+et\s+(\-?\d+(?:\.\d+)?)\s*v", texte
-        )
-        if entre_match:
-            v_bas  = float(entre_match.group(1))
-            v_haut = float(entre_match.group(2))
-        else:
-            bas_match  = re.search(r"niveau\s+bas\s+(?:de|=)\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-            haut_match = re.search(r"niveau\s+haut\s+(?:de|=)\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
-            if bas_match:  v_bas  = float(bas_match.group(1))
-            if haut_match: v_haut = float(haut_match.group(1))
-
-    if None in (r1, r2, r3, c, t, v_bas, v_haut):
-        return None
-
-    return {"r1": r1, "r2": r2, "r3": r3, "capacite": c, "periode": t, "v_bas": v_bas, "v_haut": v_haut}
+    return extraire_parametres_rc(question, mode="thevenin_signal_carre")
 
 
 def tracer_thevenin_rc_signal_carre(

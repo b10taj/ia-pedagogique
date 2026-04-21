@@ -141,11 +141,13 @@ Ordre de priorite actuel (resume) :
 - `expliquer_thevenin_rc_signal_carre()`
 
 ### Extraction de parametres
+- `extraire_parametres_rc()` : extracteur RC commun pour les cas passe-bas, signal carre et Thevenin
 - `extraire_parametres_passe_bas_premier_ordre()`
 - `extraire_parametres_signal_carre_rc()`
 - `extraire_parametres_thevenin_rc_signal_carre()`
 
 Gestion des unites/préfixes : `k`, `m`, `u`, `micro`, `n`, `nano`, `p`, `meg`.
+Normalisation amont des énoncés RC : texte copié depuis PDF/Word, symboles Unicode, indices éclatés sur plusieurs lignes, espaces autour de `=`.
 
 ### Traceurs
 - `tracer_passe_bas_premier_ordre()`
@@ -162,6 +164,11 @@ Gestion des unites/préfixes : `k`, `m`, `u`, `micro`, `n`, `nano`, `p`, `meg`.
 
 ### Correction parsing unites
 - Ajout de la prise en charge explicite de `micro` et `nano` dans les extracteurs.
+
+### Correction extraction RC et valeurs par defaut
+- Factorisation de l'extraction RC dans une fonction commune pour les differents exercices RC.
+- Ajout d'une normalisation des énoncés avant regex pour gérer les copier-coller depuis PDF/Word.
+- Correction du cas où les tracés retombaient sur les valeurs par défaut faute d'extraction des paramètres.
 
 ### Correction bug de formatage des prompts (critique)
 - Erreur resolue : `KeyError: '-t/\\tau'` due aux accolades LaTeX non echappees lors de `.format()`.
