@@ -4,6 +4,13 @@ Application Streamlit qui assiste la resolution d'exercices d'electronique (anal
 
 ## Fonctionnalites
 
+### UI a deux modes
+- **Mode Resolution d'exercice** : workflow actuel (detection automatique, explication pas a pas, traces si applicable)
+- **Mode Simulation LTspice** : nouvelle interface dediee (upload de fichiers `.asc/.cir/.net/.txt` + zone d'instructions)
+- Selection visuelle via cartes cliquables avec etat actif
+- Style contraste eleve (cartes sombres, texte clair, bordures renforcees)
+- Note : la logique backend de simulation LTspice est prevue ensuite (UI en place, execution non active)
+
 ### Detection automatique des exercices
 - Diode silicium simple
 - Diode en boites noires (X/Y)
@@ -68,10 +75,13 @@ streamlit run app.py
 
 ## Utilisation
 
-1. Saisir un enonce dans l'interface
-2. Cliquer sur Envoyer
-3. L'assistant detecte le type de probleme
+1. Choisir un mode dans le menu de cartes :
+	- **Resolution d'exercice**
+	- **Simulation LTspice**
+2. En mode Resolution : saisir un enonce puis cliquer sur Envoyer
+3. L'assistant detecte le type de probleme et route vers le prompt specialise
 4. Lire l'explication et, si applicable, le trace genere automatiquement
+5. En mode Simulation LTspice : importer des fichiers et preparer les instructions (UI disponible, traitement backend a venir)
 
 ## Exemples d'enonces RC couverts
 
@@ -183,12 +193,8 @@ Normalisation amont des énoncés RC : texte copié depuis PDF/Word, symboles Un
 - Ajouter une suite de tests unitaires pour les extracteurs regex
 - Ajouter des tests de non-regression sur la detection de type
 - Ajouter export de courbes et rapport automatique
-- [ ] Upload d'image de circuit pour analyse automatique
-- [ ] Support amplificateur à émetteur commun
-- [ ] Support redresseurs à diodes multiples
-- [ ] Validation mathématique des résultats
-- [ ] Librairie étendue de circuits
-- [ ] Mode "quiz" pédagogique
+- [x] Upload d'image de circuit pour analyse automatique
+- [ ] Activer le backend du mode Simulation LTspice (creation/modification de fichiers)
 
 ## 📚 Ressources
 
