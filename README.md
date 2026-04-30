@@ -6,10 +6,9 @@ Application Streamlit qui assiste la resolution d'exercices d'electronique (anal
 
 ### UI a deux modes
 - **Mode Resolution d'exercice** : workflow actuel (detection automatique, explication pas a pas, traces si applicable)
-- **Mode Simulation LTspice** : nouvelle interface dediee (upload de fichiers `.asc/.cir/.net/.txt` + zone d'instructions)
+- **Mode Simulation LTspice** : generation de fichiers `.asc` depuis un enonce textuel — 4 templates verifies + mode IA general
 - Selection visuelle via cartes cliquables avec etat actif
 - Style contraste eleve (cartes sombres, texte clair, bordures renforcees)
-- Note : la logique backend de simulation LTspice est prevue ensuite (UI en place, execution non active)
 
 ### Detection automatique des exercices
 - Diode silicium simple
@@ -81,7 +80,28 @@ streamlit run app.py
 2. En mode Resolution : saisir un enonce puis cliquer sur Envoyer
 3. L'assistant detecte le type de probleme et route vers le prompt specialise
 4. Lire l'explication et, si applicable, le trace genere automatiquement
-5. En mode Simulation LTspice : importer des fichiers et preparer les instructions (UI disponible, traitement backend a venir)
+5. En mode Simulation LTspice : decrire le circuit en francais, cliquer **Generer**, puis telecharger le fichier `.asc`
+
+## Exemples d'enonces pour la simulation LTspice
+
+### Diviseur resistif fixe
+`Diviseur resistif, VIN=9V, R1=10k, R2=4.7k`
+
+### Diviseur resistif variable (parametre sweep)
+`Diviseur resistif variable, VIN=5V, R1=10k`
+
+### Circuit RC — analyse temporelle (sinus)
+`Circuit RC sinusoidal, R=1k, C=100n, f=10kHz`
+
+### Circuit RC — analyse frequentielle (Bode)
+`Circuit RC, R=2.2k, C=47n, Bode de 10Hz a 10MHz`
+
+### Circuits generalises (generes par IA)
+- `Filtre RLC serie R=100, L=10mH, C=1uF — sinus 1kHz`
+- `Ampli-op inverseur, R1=10k, R2=100k, alimentation ±15V`
+- `Oscillateur a pont de Wien, R=10k, C=10n`
+
+> **Note IA** : pour les circuits hors-template (ampli-op, RLC, transistor…), Claude Haiku genere le fichier `.asc` entierement. La topologie et les valeurs sont correctes ; de legeres corrections visuelles (deplacement de fils) peuvent etre necessaires dans LTSpice XVII.
 
 ## Exemples d'enonces RC couverts
 
@@ -117,18 +137,27 @@ streamlit run app.py
 .
 |- app.py
 |- main.py
+|- ltspice_generator.py
 |- prompts/
 |  |- passive.py
 |  |- diodes.py
 |  |- diode_zener.py
 |  |- transistor.py
 |  |- general.py
+|- templates/
+|  |- diviseur_resistif_fixe.asc
+|  |- diviseur_resistif_variable.asc
+|  |- rc_sinus_temporel.asc
+|  |- rc_sinus_frequentiel.asc
+|  |- general.asc
 ```
 
 ### Fichiers
 - `app.py` : interface Streamlit, session state, affichage des traces
 - `main.py` : detection, extraction de parametres, appels IA, traceurs
+- `ltspice_generator.py` : detection du type de circuit, injection de parametres dans les templates, generation IA
 - `prompts/passive.py` : prompts RC, puissance, diviseur
+- `templates/` : fichiers `.asc` LTSpice verifies (positions de composants corrigees)
 
 ### Routage principal
 `detecter_type_probleme(question)`
@@ -194,7 +223,7 @@ Normalisation amont des énoncés RC : texte copié depuis PDF/Word, symboles Un
 - Ajouter des tests de non-regression sur la detection de type
 - Ajouter export de courbes et rapport automatique
 - [x] Upload d'image de circuit pour analyse automatique
-- [ ] Activer le backend du mode Simulation LTspice (creation/modification de fichiers)
+- [x] Activer le backend du mode Simulation LTspice (generation `.asc` depuis enonce textuel)
 
 ## 📚 Ressources
 

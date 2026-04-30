@@ -136,23 +136,72 @@ with mode_col2:
         st.rerun()
 
 if st.session_state.ui_mode == "simulation":
+    from ltspice_generator import generer_asc_depuis_enonce
+
     st.write("---")
     st.write("### 🧪 Mode Simulation LTspice")
-    st.info("UI en place. La logique de création/modification des fichiers LTspice sera ajoutée ensuite.")
-    st.write("#### Fichiers LTspice (optionnel)")
-    st.file_uploader(
-        "Importer un schéma ou netlist",
-        type=["asc", "cir", "net", "txt"],
-        accept_multiple_files=True,
-        key="ltspice_files",
-    )
-    st.text_area(
-        "Instruction pour l'IA (simulation)",
-        placeholder="Ex: Crée une netlist RC passe-bas avec R=1k, C=100n, source sinusoïdale 1kHz.",
+
+    enonce_sim = st.text_area(
+        "Décris ton circuit",
+        placeholder=(
+            "Ex: Diviseur résistif, VIN=9V, R1=10k, R2=4.7k\n"
+            "Ex: Diviseur résistif variable, VIN=5V, R1=10k\n"
+            "Ex: Circuit RC sinusoïdal, R=1k, C=100n, f=10kHz — analyse temporelle\n"
+            "Ex: Circuit RC, R=2.2k, C=47n, Bode de 10Hz à 10MHz\n"
+            "Ex (IA): Filtre RLC série R=100Ω, L=10mH, C=1µF — sinus 1kHz\n"
+            "Ex (IA): Ampli-op inverseur, R1=10k, R2=100k, alimentation ±15V"
+        ),
         height=120,
-        key="ltspice_prompt",
+        key="ltspice_enonce",
     )
-    st.button("Lancer (bientôt)", disabled=True, use_container_width=True)
+
+    if st.button("Générer le fichier .asc", use_container_width=True):
+        if not enonce_sim or not enonce_sim.strip():
+            st.warning("Saisis un énoncé avant de générer.")
+        else:
+            with st.spinner("Analyse de l'énoncé et génération du fichier…"):
+                try:
+                    resultat = generer_asc_depuis_enonce(enonce_sim, client=client)
+                except Exception as e:
+                    st.error(f"Erreur lors de la génération : {e}")
+                    st.stop()
+
+            type_labels = {
+                "diviseur_resistif_fixe":    "Diviseur résistif (résistances fixes)",
+                "diviseur_resistif_variable": "Diviseur résistif (résistance variable)",
+                "rc_sinus_temporel":         "Circuit RC — Analyse temporelle (sinus)",
+                "rc_sinus_frequentiel":      "Circuit RC — Analyse fréquentielle (Bode)",
+                "general":                   "Circuit personnalisé — généré par IA",
+            }
+            label = type_labels.get(resultat["type_circuit"], resultat["type_circuit"])
+            st.success(f"Circuit détecté : **{label}** — template `{resultat['template_fichier']}`")
+
+            if resultat.get("ia_generated"):
+                st.info(
+                    "Ce fichier a été généré entièrement par l'IA. "
+                    "Les positions des composants peuvent nécessiter de légères corrections "
+                    "visuelles dans LTSpice (déplacer/reconnecter des fils). "
+                    "La topologie et les valeurs sont correctes."
+                )
+
+            if resultat["parametres_bruts"]:
+                st.write("**Paramètres extraits :**")
+                cols = st.columns(min(len(resultat["parametres_bruts"]), 4))
+                for i, (k, v) in enumerate(resultat["parametres_bruts"].items()):
+                    cols[i % 4].metric(k, v)
+            else:
+                st.info("Aucun paramètre numérique détecté — le template par défaut a été utilisé.")
+
+            st.code(resultat["asc_content"], language="text")
+
+            st.download_button(
+                label="⬇️ Télécharger le fichier LTSpice (.asc)",
+                data=resultat["asc_content"],
+                file_name=f"circuit_{resultat['type_circuit']}.asc",
+                mime="text/plain",
+                use_container_width=True,
+            )
+
     st.stop()
 
 # Section pour charger une image optionnelle
