@@ -58,6 +58,102 @@ if "plot_type" not in st.session_state:
     st.session_state.plot_type = None
 if "plot_params" not in st.session_state:
     st.session_state.plot_params = None
+if "ui_mode" not in st.session_state:
+    st.session_state.ui_mode = "exercise"
+
+# Sélecteur de mode (UI)
+st.markdown(
+    """
+    <style>
+    .mode-card {
+        border: 2px solid #5f6b85;
+        border-radius: 12px;
+        padding: 14px;
+        background: linear-gradient(160deg, #1f2937 0%, #111827 100%);
+        min-height: 130px;
+        box-shadow: 0 2px 10px rgba(17, 24, 39, 0.35);
+    }
+    .mode-title {
+        font-weight: 700;
+        font-size: 1.02rem;
+        margin-bottom: 6px;
+        color: #f8fafc;
+    }
+    .mode-desc {
+        color: #d1d5db;
+        font-size: 0.92rem;
+        line-height: 1.35;
+    }
+    .mode-badge {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #2563eb;
+        color: #eff6ff;
+        font-size: 0.78rem;
+        font-weight: 600;
+        border: 1px solid #93c5fd;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.write("### 🎛️ Choix du mode")
+mode_col1, mode_col2 = st.columns(2)
+
+with mode_col1:
+    badge = "<span class='mode-badge'>Actif</span>" if st.session_state.ui_mode == "exercise" else ""
+    st.markdown(
+        f"""
+        <div class="mode-card">
+            <div class="mode-title">🧠 Résolution d'exercice</div>
+            <div class="mode-desc">Analyse guidée, détection automatique du type d'exercice, explication pas à pas.</div>
+            {badge}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Choisir Résolution", use_container_width=True):
+        st.session_state.ui_mode = "exercise"
+        st.rerun()
+
+with mode_col2:
+    badge = "<span class='mode-badge'>Actif</span>" if st.session_state.ui_mode == "simulation" else ""
+    st.markdown(
+        f"""
+        <div class="mode-card">
+            <div class="mode-title">🧪 Simulation LTspice</div>
+            <div class="mode-desc">Manipulation et création de fichiers LTspice (.asc, .cir, .net).</div>
+            {badge}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Choisir Simulation", use_container_width=True):
+        st.session_state.ui_mode = "simulation"
+        st.rerun()
+
+if st.session_state.ui_mode == "simulation":
+    st.write("---")
+    st.write("### 🧪 Mode Simulation LTspice")
+    st.info("UI en place. La logique de création/modification des fichiers LTspice sera ajoutée ensuite.")
+    st.write("#### Fichiers LTspice (optionnel)")
+    st.file_uploader(
+        "Importer un schéma ou netlist",
+        type=["asc", "cir", "net", "txt"],
+        accept_multiple_files=True,
+        key="ltspice_files",
+    )
+    st.text_area(
+        "Instruction pour l'IA (simulation)",
+        placeholder="Ex: Crée une netlist RC passe-bas avec R=1k, C=100n, source sinusoïdale 1kHz.",
+        height=120,
+        key="ltspice_prompt",
+    )
+    st.button("Lancer (bientôt)", disabled=True, use_container_width=True)
+    st.stop()
 
 # Section pour charger une image optionnelle
 st.write("### 📸 Circuit (optionnel)")
