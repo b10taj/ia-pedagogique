@@ -4,17 +4,19 @@ Backend pour la génération automatique de fichiers LTSpice .asc depuis un éno
 Ne dépend pas de Streamlit — retourne des données brutes exploitables par l'UI.
 
 Circuits supportés :
-  - diviseur_resistif_fixe     : Diviseur résistif avec résistances fixes (VIN, R1, R2)
-  - diviseur_resistif_variable : Diviseur avec résistance variable (sweep .step param)
-  - rc_sinus_temporel          : RC + signal sinusoïdal, analyse temporelle (.tran)
-  - rc_sinus_frequentiel       : RC + signal AC, diagramme de Bode (.ac)
-  - general                    : Circuit quelconque, généré par Claude IA
+  - diviseur_resistif_fixe       : Diviseur résistif avec résistances fixes (VIN, R1, R2)
+  - diviseur_resistif_variable   : Diviseur avec résistance variable (sweep .step param)
+  - rc_sinus_temporel            : RC + signal sinusoïdal, analyse temporelle (.tran)
+  - rc_sinus_frequentiel         : RC + signal AC, diagramme de Bode (.ac)
+  - zener_diviseur               : Diviseur résistif avec diode Zener (BZX84C10VL)
+  - stabilisateur_tension_zener  : Stabilisateur 10V (diode + Zener + RL variable)
+  - amplificateur_bipolaire      : Ampli NPN émetteur commun (2N2222, RL variable, .ac)
+  - general                      : Circuit quelconque, généré par Claude IA
 """
 
 import re
 import os
 import tempfile
-import unicodedata
 
 # ---------------------------------------------------------------------------
 # Chemins
@@ -23,79 +25,19 @@ import unicodedata
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
 TEMPLATE_MAP = {
-    "diviseur_resistif_fixe":    "diviseur_resistif_fixe.asc",
-    "diviseur_resistif_variable": "diviseur_resistif_variable.asc",
-    "rc_sinus_temporel":         "rc_sinus_temporel.asc",
-    "rc_sinus_frequentiel":      "rc_sinus_frequentiel.asc",
-    "general":                   "general.asc",
+    "diviseur_resistif_fixe":      "diviseur_resistif_fixe.asc",
+    "diviseur_resistif_variable":  "diviseur_resistif_variable.asc",
+    "rc_sinus_temporel":           "rc_sinus_temporel.asc",
+    "rc_sinus_frequentiel":        "rc_sinus_frequentiel.asc",
+    "zener_diviseur":              "zener_diviseur.asc",
+    "stabilisateur_tension_zener": "stabbilisateur_tension_zener.asc",
+    "amplificateur_bipolaire":     "amplificateur_bipolaire.asc",
+    "general":                     "general.asc",
 }
 
 # ---------------------------------------------------------------------------
-# Utilitaires texte
+# Utilitaires
 # ---------------------------------------------------------------------------
-
-def _normaliser(texte: str) -> str:
-    texte = unicodedata.normalize("NFKC", texte)
-    texte = texte.lower()
-    texte = re.sub(r"\s+", " ", texte)
-    return texte
-
-
-def _parse_valeur(s: str) -> float | None:
-    """
-    Convertit une chaîne LTSpice/texte en float SI.
-    Ex: '4.7k' → 4700.0, '100n' → 1e-7, '2.2meg' → 2.2e6.
-    """
-    if not s:
-        return None
-    s = s.strip().lower().replace(",", ".")
-    prefixes = [
-        ("meg", 1e6), ("k", 1e3),
-        ("m",   1e-3), ("u", 1e-6), ("µ", 1e-6), ("micro", 1e-6),
-        ("n",   1e-9), ("nano", 1e-9),
-        ("p",   1e-12),
-    ]
-    for suffix, factor in prefixes:
-        if s.endswith(suffix):
-            num = s[: -len(suffix)]
-            try:
-                return float(num) * factor
-            except ValueError:
-                return None
-    # Strip trailing unit labels that don't affect magnitude
-    s_clean = re.sub(r"[a-zΩω°]+$", "", s)
-    try:
-        return float(s_clean) if s_clean else None
-    except ValueError:
-        return None
-
-
-def _parse_freq(s: str) -> float | None:
-    """
-    Convertit une chaîne de fréquence en Hz.
-    Ex: '10kHz' → 10000.0, '1MHz' → 1e6, '50' → 50.0.
-    """
-    if not s:
-        return None
-    s = s.strip().lower().replace(",", ".")
-    if s.endswith("mhz"):
-        try:
-            return float(s[:-3]) * 1e6
-        except ValueError:
-            return None
-    if s.endswith("khz"):
-        try:
-            return float(s[:-3]) * 1e3
-        except ValueError:
-            return None
-    if s.endswith("hz"):
-        try:
-            return float(s[:-2])
-        except ValueError:
-            return None
-    # Fallback: treat as plain LTSpice value
-    return _parse_valeur(s)
-
 
 def _formater_valeur(v: float) -> str:
     """Float → chaîne LTSpice. Ex: 4700 → '4.7k', 100e-9 → '100n'."""
@@ -117,171 +59,8 @@ def _formater_valeur(v: float) -> str:
     return f"{v * 1e12:.6g}p"
 
 
-def _extraire_groupe(pattern: str, texte: str) -> str | None:
-    """Cherche le pattern dans texte et retourne le premier groupe capturé non-None."""
-    m = re.search(pattern, texte, re.IGNORECASE)
-    if not m:
-        return None
-    for g in m.groups():
-        if g is not None:
-            return g.strip()
-    return None
-
-
 # ---------------------------------------------------------------------------
-# 1. Détection du type de circuit
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# 1. Détection du type de circuit
-# ---------------------------------------------------------------------------
-
-def _detecter_type(texte: str) -> str:
-    """Retourne le type de circuit depuis le texte normalisé."""
-
-    # Priorité 0 – demande explicite de circuit général / personnalisé
-    if re.search(
-        r"g[eé]n[eé]ral|personnalis[eé]|custom|libre|quelconque|"
-        r"autre.*circuit|circuit.*autre|de.*z[eé]ro|from.*scratch",
-        texte,
-    ):
-        return "general"
-
-    # Priorité 1 – circuits hors-template connus (trigger IA)
-    if re.search(
-        r"ampli.?op\b|op.?amp\b|\baop\b|opamp|"
-        r"\brlc\b|\blc\b|inductance|bobine|"
-        r"passe.haut|passe.bande|rejecteur|"
-        r"oscillateur|trigger|schmitt|"
-        r"transistor|bjt|mosfet|\bfet\b|"
-        r"diode|zener|rectif|"
-        r"\b555\b|ne555|timer|"
-        r"pont.*wheatstone|wheatstone|"
-        r"pont.*de.*wien|wien",
-        texte,
-    ):
-        return "general"
-
-    # Priorité 2 – résistance variable / potentiomètre
-    if re.search(
-        r"variable|potentio|pot\b|rh[eé]ostat|r_?var|rvar|"
-        r"diviseur.*vari|vari.*diviseur",
-        texte,
-    ):
-        return "diviseur_resistif_variable"
-
-    # Priorité 3 – Bode / analyse fréquentielle
-    if re.search(
-        r"bode|fr[eé]quentiel|diagramme.*gain|gain.*phase|"
-        r"analyse.*fr[eé]q|\.ac\b|balayage.*fr[eé]q",
-        texte,
-    ):
-        return "rc_sinus_frequentiel"
-
-    # Priorité 4 – RC + signal sinusoïdal temporel
-    if re.search(
-        r"sinus|sinuso[iï]dal|temporel|\.tran\b|"
-        r"r[eé]ponse.*temps|signal.*sin|analyse.*temp",
-        texte,
-    ):
-        return "rc_sinus_temporel"
-
-    # Priorité 5 – diviseur résistif fixe (explicite ou R1+R2+VIN)
-    if re.search(
-        r"diviseur|pont.*r[eé]sist|voltage.*divid|"
-        r"r1.*r2|r_?1.*r_?2",
-        texte,
-    ):
-        return "diviseur_resistif_fixe"
-
-    # Priorité 6 – circuit RC sans autre précision → temporel
-    if re.search(r"\brc\b|r[eé]sistance.*capa|capa.*r[eé]sist", texte):
-        return "rc_sinus_temporel"
-
-    # Fallback – rien de reconnu → IA
-    return "general"
-
-
-# ---------------------------------------------------------------------------
-# 2. Extraction des paramètres selon le type
-# ---------------------------------------------------------------------------
-
-def _extraire_parametres(texte: str, type_circuit: str) -> tuple[dict, dict]:
-    """
-    Retourne (params_bruts: {str→str}, params_float: {str→float}).
-    """
-    bruts: dict[str, str] = {}
-    floats: dict[str, float] = {}
-
-    def _cap(cle: str, pattern: str, parser=_parse_valeur):
-        val = _extraire_groupe(pattern, texte)
-        if val:
-            bruts[cle] = val
-            parsed = parser(val)
-            if parsed is not None:
-                floats[cle] = parsed
-
-    # ── Paramètres communs à tous les circuits ──────────────────────────
-    # Résistance(s)
-    _cap("R1",
-         r"r1\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)"
-         r"|r[_\s]?1\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)")
-
-    if not bruts.get("R1"):
-        # Résistance générique : R = ...  ou  r = ...
-        _cap("R1",
-             r"\br\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)")
-
-    # ── Paramètres spécifiques ──────────────────────────────────────────
-    if type_circuit in ("diviseur_resistif_fixe", "diviseur_resistif_variable"):
-        # Tension d'alimentation
-        _cap("VIN",
-             r"v(?:in|s|cc|alim|source|dd)?\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p|v)?)")
-        # R2 (seulement pour le diviseur fixe)
-        if type_circuit == "diviseur_resistif_fixe":
-            _cap("R2",
-                 r"r2\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)"
-                 r"|r[_\s]?2\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)")
-
-    if type_circuit in ("rc_sinus_temporel", "rc_sinus_frequentiel"):
-        # Capacité
-        _cap("C1",
-             r"c1\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)"
-             r"|c\s*[=:]\s*([\d.,]+\s*(?:meg|k|m|u|µ|n|p)?)")
-
-    if type_circuit == "rc_sinus_temporel":
-        # Amplitude
-        _cap("Vamp",
-             r"v(?:amp|p(?:eak)?|cr[eê]te|max)\s*[=:]\s*([\d.,]+)"
-             r"|amplitude\s*(?:de\s*)?([\d.,]+)")
-        # Fréquence
-        _cap("freq",
-             r"f(?:r[eé]q(?:uence)?)?\s*[=:]\s*([\d.,]+\s*(?:meg|k|mhz|khz|hz)?)"
-             r"|([\d.,]+)\s*(?:k?hz|mhz|khz)",
-             parser=_parse_freq)
-
-    if type_circuit == "rc_sinus_frequentiel":
-        # Plage de fréquence pour .ac : "de X à Y"
-        m_range = re.search(
-            r"de\s+([\d.,]+\s*(?:meg|k|mhz|khz|hz)?)\s*[àa]\s*([\d.,]+\s*(?:meg|k|mhz|khz|hz)?)",
-            texte,
-            re.IGNORECASE,
-        )
-        if m_range:
-            fstart = _parse_freq(m_range.group(1))
-            fstop = _parse_freq(m_range.group(2))
-            if fstart:
-                bruts["f_start"] = m_range.group(1)
-                floats["f_start"] = fstart
-            if fstop:
-                bruts["f_stop"] = m_range.group(2)
-                floats["f_stop"] = fstop
-
-    return bruts, floats
-
-
-# ---------------------------------------------------------------------------
-# 3. Modification du fichier .asc
+# 1. Modification du fichier .asc
 # ---------------------------------------------------------------------------
 
 def remplacer_valeur_composant(asc_content: str, inst_name: str, nouvelle_valeur: str) -> str:
@@ -316,18 +95,15 @@ def remplacer_valeur_composant(asc_content: str, inst_name: str, nouvelle_valeur
 def _remplacer_commande_sim(asc_content: str, prefixe_cmd: str, nouvelle_cmd: str) -> str:
     """
     Remplace la commande SPICE (dans une ligne TEXT ... !<cmd>) dont le début
-    correspond à <prefixe_cmd>.
+    correspond à <prefixe_cmd>, en préservant le '!' obligatoire.
     Ex: prefixe_cmd='.tran', nouvelle_cmd='.tran 5m'
     """
-    def _rempl(m):
-        return m.group(0).replace(m.group(1), nouvelle_cmd)
-
-    pattern = rf"(!({re.escape(prefixe_cmd)}\b[^\n]*))"
-    return re.sub(pattern, _rempl, asc_content, flags=re.IGNORECASE)
+    pattern = rf"!{re.escape(prefixe_cmd)}\b[^\n]*"
+    return re.sub(pattern, f"!{nouvelle_cmd}", asc_content, flags=re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
-# 4. Application des paramètres par type de circuit
+# 2. Application des paramètres par type de circuit
 # ---------------------------------------------------------------------------
 
 def _appliquer_diviseur_fixe(asc_content: str, params: dict) -> str:
@@ -408,17 +184,80 @@ def _appliquer_rc_frequentiel(asc_content: str, params: dict) -> str:
     return asc_content
 
 
+def _appliquer_zener_diviseur(asc_content: str, params: dict) -> str:
+    if "R1" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "R1", _formater_valeur(params["R1"])
+        )
+    if "R2" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "R2", _formater_valeur(params["R2"])
+        )
+    vamp = params.get("VIN", 12.0)
+    freq = params.get("freq", 1000.0)
+    sine_val = f"SINE(0 {_formater_valeur(vamp)} {_formater_valeur(freq)} 0 0 0 2)"
+    asc_content = remplacer_valeur_composant(asc_content, "VIN", sine_val)
+    duree = 5.0 / freq
+    asc_content = _remplacer_commande_sim(
+        asc_content, ".tran", f".tran 0 {_formater_valeur(duree)} 0"
+    )
+    return asc_content
+
+
+def _appliquer_stabilisateur_zener(asc_content: str, params: dict) -> str:
+    if "R1" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "R1", _formater_valeur(params["R1"])
+        )
+    vamp = params.get("Vamp", 20.0)
+    freq = params.get("freq", 50.0)
+    sine_val = f"SINE(0 {_formater_valeur(vamp)} {_formater_valeur(freq)} 0 0 0 3)"
+    asc_content = remplacer_valeur_composant(asc_content, "V1", sine_val)
+    return asc_content
+
+
+def _appliquer_amplificateur_bipolaire(asc_content: str, params: dict) -> str:
+    if "VCC" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "VCC", _formater_valeur(params["VCC"])
+        )
+    if "RC" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "RC", _formater_valeur(params["RC"])
+        )
+    if "RE" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "RE", _formater_valeur(params["RE"])
+        )
+    if "R1" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "R1", _formater_valeur(params["R1"])
+        )
+    if "R2" in params:
+        asc_content = remplacer_valeur_composant(
+            asc_content, "R2", _formater_valeur(params["R2"])
+        )
+    vamp = params.get("Vamp", 0.01)
+    freq = params.get("freq", 1000.0)
+    sine_val = f"SINE(0 {_formater_valeur(vamp)} {_formater_valeur(freq)} 0 0 0 2)"
+    asc_content = remplacer_valeur_composant(asc_content, "VIN", sine_val)
+    return asc_content
+
+
 _APPLIQUER = {
-    "diviseur_resistif_fixe":    _appliquer_diviseur_fixe,
-    "diviseur_resistif_variable": _appliquer_diviseur_variable,
-    "rc_sinus_temporel":         _appliquer_rc_temporel,
-    "rc_sinus_frequentiel":      _appliquer_rc_frequentiel,
+    "diviseur_resistif_fixe":      _appliquer_diviseur_fixe,
+    "diviseur_resistif_variable":  _appliquer_diviseur_variable,
+    "rc_sinus_temporel":           _appliquer_rc_temporel,
+    "rc_sinus_frequentiel":        _appliquer_rc_frequentiel,
+    "zener_diviseur":              _appliquer_zener_diviseur,
+    "stabilisateur_tension_zener": _appliquer_stabilisateur_zener,
+    "amplificateur_bipolaire":     _appliquer_amplificateur_bipolaire,
     # "general" est géré séparément (génération IA)
 }
 
 
 # ---------------------------------------------------------------------------
-# 5. Génération IA pour les circuits hors-template
+# 3. Génération IA pour les circuits hors-template
 # ---------------------------------------------------------------------------
 
 _PROMPT_GENERATION_ASC = """\
@@ -569,60 +408,94 @@ def _generer_asc_ia(enonce: str, client=None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 6. Point d'entrée public
+# 4. Point d'entrée public
 # ---------------------------------------------------------------------------
 
-def analyser_enonce(enonce: str) -> dict:
-    """
-    Analyse l'énoncé et retourne le type détecté + les paramètres extraits.
-    {
-        "type_circuit": str,
-        "parametres": {nom: float},
-        "parametres_bruts": {nom: str}
-    }
-    """
-    texte = _normaliser(enonce)
-    type_circuit = _detecter_type(texte)
-    bruts, floats = _extraire_parametres(texte, type_circuit)
-    return {
-        "type_circuit": type_circuit,
-        "parametres": floats,
-        "parametres_bruts": bruts,
-    }
+_PROMPT_ANALYSE_CIRCUIT = """\
+Tu es un expert en circuits électroniques et LTSpice. Analyse la description de circuit
+fournie et retourne un JSON structuré identifiant le template LTSpice le plus adapté.
+
+Templates disponibles (paramètres en unités SI de base) :
+  "diviseur_resistif_fixe"     : VIN (V), R1 (Ω), R2 (Ω)
+  "diviseur_resistif_variable" : VIN (V), R1 (Ω)
+  "rc_sinus_temporel"          : R1 (Ω), C1 (F), Vamp (V), freq (Hz)
+  "rc_sinus_frequentiel"       : R1 (Ω), C1 (F), f_start (Hz), f_stop (Hz)
+  "zener_diviseur"             : VIN (V, amplitude), R1 (Ω, résistance série), R2 (Ω, charge en parallèle avec la Zener), freq (Hz)
+  "stabilisateur_tension_zener": Vamp (V), freq (Hz), R1 (Ω, résistance série)
+  "amplificateur_bipolaire"    : VCC (V), Vamp (V), freq (Hz), RC (Ω), RE (Ω), R1 (Ω), R2 (Ω)
+  "general"                    : tout autre circuit non couvert par les templates ci-dessus
+
+Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de texte avant/après) :
+{
+  "type_circuit": "<type>",
+  "parametres": { "<nom>": <valeur_float_SI>, ... },
+  "explication": "<une courte phrase justifiant le choix du template>"
+}
+
+Règles :
+- Convertis les préfixes SI : k→×1000, n→×1e-9, µ/u→×1e-6, p→×1e-12, meg→×1e6
+- N'inclus QUE les paramètres effectivement mentionnés dans la description
+- Utilise un template connu dès que la topologie correspond, même si les noms diffèrent
+- Pour "zener_diviseur" : R1 = résistance série (limiteuse de courant), R2 = charge parallèle à la Zener
+- Pour "amplificateur_bipolaire" : R1/R2 = pont diviseur de polarisation de base
+"""
 
 
-def generer_asc_depuis_enonce(enonce: str, client=None) -> dict:
+def analyser_enonce_ia(enonce: str, client=None) -> dict:
     """
-    Analyse l'énoncé, génère le fichier .asc (template ou IA) et retourne :
-    {
-        "asc_path": str,          # chemin du fichier temporaire
-        "asc_content": str,       # contenu (pour st.download_button)
-        "parametres": dict,       # valeurs float détectées
-        "parametres_bruts": dict, # valeurs texte telles que dans l'énoncé
-        "type_circuit": str,
-        "template_fichier": str,
-        "ia_generated": bool,     # True si le fichier a été généré par IA
-    }
+    Utilise Claude Haiku pour analyser un énoncé libre et identifier le meilleur template.
+    Retourne {"type_circuit": str, "parametres": {str: float}, "explication": str}.
     """
-    analyse = analyser_enonce(enonce)
-    type_circuit = analyse["type_circuit"]
-    parametres   = analyse["parametres"]
+    import json as _json
+
+    if client is None:
+        from anthropic import Anthropic
+        from dotenv import load_dotenv
+        load_dotenv()
+        client = Anthropic()
+
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=512,
+        system=_PROMPT_ANALYSE_CIRCUIT,
+        messages=[{"role": "user", "content": enonce}],
+    )
+    texte = re.sub(r"```[^\n]*\n?", "", response.content[0].text).strip()
+    try:
+        data = _json.loads(texte)
+        return {
+            "type_circuit": data.get("type_circuit", "general"),
+            "parametres":   {k: float(v) for k, v in data.get("parametres", {}).items()},
+            "explication":  data.get("explication", ""),
+        }
+    except (ValueError, KeyError):
+        return {"type_circuit": "general", "parametres": {}, "explication": ""}
+
+
+def generer_asc_depuis_params(
+    type_circuit: str,
+    params: dict,
+    enonce_ia: str = None,
+    client=None,
+) -> dict:
+    """
+    Génère le fichier .asc depuis des paramètres explicites (formulaire ou analyse IA).
+    Pour type "general", enonce_ia est utilisé comme prompt de génération.
+    params : {str: float} — valeurs en unités SI de base.
+    """
     ia_generated = False
 
     if type_circuit == "general":
-        # Génération complète par Claude
-        asc_content  = _generer_asc_ia(enonce, client)
+        asc_content  = _generer_asc_ia(enonce_ia or "circuit général", client)
         fichier      = "general.asc"
         ia_generated = True
     else:
-        # Template fixe + remplacement des valeurs
         fichier = TEMPLATE_MAP[type_circuit]
         chemin  = os.path.join(TEMPLATES_DIR, fichier)
         with open(chemin, "r", encoding="utf-8") as f:
             asc_content = f.read()
-        asc_content = _APPLIQUER[type_circuit](asc_content, parametres)
+        asc_content = _APPLIQUER[type_circuit](asc_content, params)
 
-    # Écriture dans un fichier temporaire
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         suffix=f"_{type_circuit}.asc",
@@ -635,8 +508,8 @@ def generer_asc_depuis_enonce(enonce: str, client=None) -> dict:
     return {
         "asc_path":         tmp.name,
         "asc_content":      asc_content,
-        "parametres":       parametres,
-        "parametres_bruts": analyse["parametres_bruts"],
+        "parametres":       params,
+        "parametres_bruts": {k: str(v) for k, v in params.items()},
         "type_circuit":     type_circuit,
         "template_fichier": fichier,
         "ia_generated":     ia_generated,

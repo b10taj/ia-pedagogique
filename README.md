@@ -1,68 +1,77 @@
 # Assistant Electronique
 
-Application Streamlit qui assiste la resolution d'exercices d'electronique (analyse guidee + traces automatiques), avec detection automatique du type d'enonce et routage vers des prompts specialises.
+Application Streamlit qui assiste la résolution d'exercices d'électronique (analyse guidée + tracés automatiques) et la génération de fichiers LTSpice XVII (`.asc`) depuis un formulaire ou une description libre.
 
-## Fonctionnalites
+## Fonctionnalités
 
-### UI a deux modes
-- **Mode Resolution d'exercice** : workflow actuel (detection automatique, explication pas a pas, traces si applicable)
-- **Mode Simulation LTspice** : generation de fichiers `.asc` depuis un enonce textuel — 4 templates verifies + mode IA general
-- Selection visuelle via cartes cliquables avec etat actif
-- Style contraste eleve (cartes sombres, texte clair, bordures renforcees)
+### UI à deux modes
 
-### Detection automatique des exercices
-- Diode silicium simple
-- Diode en boites noires (X/Y)
-- Diode Zener simple
-- Inverseur bipolaire
-- Transistor bipolaire
+Sélection via cartes cliquables (clic direct sur la carte, sans bouton séparé) :
+
+- **Mode Résolution d'exercice** : détection automatique du type d'énoncé, explication pas à pas, tracés matplotlib si applicable
+- **Mode Simulation LTspice** : formulaire structuré par type de circuit + mode IA général
+
+### Génération LTSpice — 7 templates + mode Général
+
+| Type | Paramètres formulaire | Analyse simulée |
+|---|---|---|
+| Diviseur résistif (résistances fixes) | VIN, R1, R2 | `.op` |
+| Diviseur résistif (résistance variable) | VIN, R1 fixe | `.step param` R2 |
+| Circuit RC — temporel (sinus) | R, C, amplitude, fréquence | `.tran` (10 périodes) |
+| Circuit RC — fréquentiel (Bode) | R, C, f_min, f_max | `.ac dec 100` |
+| Diviseur avec diode Zener | VIN amplitude, R série, R charge, fréquence | `.tran` (5 périodes) |
+| Stabilisateur de tension Zener | Amplitude, fréquence, R série | `.tran` + `.step param` RL |
+| Amplificateur bipolaire NPN | VCC, VIN, fréq, RC, RE, R1, R2 | `.ac` + `.step param` RL |
+| **Général (IA)** | Description libre | Généré entièrement par Claude Haiku |
+
+En mode **Général**, Claude Haiku analyse l'énoncé, identifie le meilleur template (ou génère le `.asc` de zéro si aucun ne correspond), et affiche les paramètres extraits.
+
+### Détection automatique des exercices
+
+- Diode silicium simple / boîtes noires / Zener
+- Inverseur bipolaire, transistor bipolaire
 - Diviseur de tension
-- Exercices de puissance (serie, parallele, deux sources)
-- RC premier ordre passe-bas (saut simple ou deux sauts)
-- RC premier ordre sous signal carre
-- RC signal carre en regime de cretes (periode courte)
-- RC avec reduction de Thevenin : R1-(R2 // C)-R3
-- Fallback probleme general
+- Exercices de puissance (série, parallèle, deux sources)
+- RC premier ordre passe-bas (saut simple ou double)
+- RC premier ordre sous signal carré
+- RC signal carré en régime de crêtes
+- RC avec réduction de Thévenin : R1-(R2 // C)-R3
+- Fallback problème général
 
-### Explications pedagogiques
-- Demarche pas a pas
-- Equations et substitutions numeriques
-- Verification physique des resultats
-- Conclusion synthetique
-- Formatage LaTeX dans les reponses
+### Tracés automatiques (matplotlib)
 
-### Traces automatiques (matplotlib)
 - Courbe VOUT=f(VIN) pour inverseur bipolaire
-- Reponse temporelle RC passe-bas (1 saut ou 2 sauts)
-- Reponse RC a signal carre
-- Reponse RC Thevenin (VIN, Vth et Vout)
+- Réponse temporelle RC passe-bas (1 ou 2 sauts)
+- Réponse RC à signal carré
+- Réponse RC Thévenin (VIN, Vth, VOUT)
 
 ## Installation
 
-### Prerequis
-- Python 3.8+
-- Cle API Anthropic
+### Prérequis
 
-### Etapes
+- Python 3.8+
+- Clé API Anthropic
+
+### Étapes
+
 1. Cloner le repository
 ```bash
 git clone <repo_url>
 cd Codes
 ```
 
-2. Creer et activer l'environnement virtuel
+2. Créer et activer l'environnement virtuel
 ```bash
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-3. Installer les dependances
+3. Installer les dépendances
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Configurer la cle API
-Creer un fichier `.env` a la racine :
+4. Configurer la clé API — créer un fichier `.env` à la racine :
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -74,174 +83,98 @@ streamlit run app.py
 
 ## Utilisation
 
-1. Choisir un mode dans le menu de cartes :
-	- **Resolution d'exercice**
-	- **Simulation LTspice**
-2. En mode Resolution : saisir un enonce puis cliquer sur Envoyer
-3. L'assistant detecte le type de probleme et route vers le prompt specialise
-4. Lire l'explication et, si applicable, le trace genere automatiquement
-5. En mode Simulation LTspice : decrire le circuit en francais, cliquer **Generer**, puis telecharger le fichier `.asc`
+### Mode Résolution d'exercice
 
-## Exemples d'enonces pour la simulation LTspice
+1. Cliquer la carte **Résolution d'exercice**
+2. (Optionnel) Charger une image du circuit
+3. Saisir l'énoncé et cliquer **Envoyer**
+4. L'assistant détecte le type et répond avec une explication structurée + tracé si applicable
 
-### Diviseur resistif fixe
-`Diviseur resistif, VIN=9V, R1=10k, R2=4.7k`
+### Mode Simulation LTspice
 
-### Diviseur resistif variable (parametre sweep)
-`Diviseur resistif variable, VIN=5V, R1=10k`
+1. Cliquer la carte **Simulation LTspice**
+2. Choisir le type de circuit dans le menu déroulant
+3. Remplir les champs numériques du formulaire **ou** choisir *Général* et décrire librement le circuit
+4. Cliquer **Générer** — télécharger le fichier `.asc`
 
-### Circuit RC — analyse temporelle (sinus)
-`Circuit RC sinusoidal, R=1k, C=100n, f=10kHz`
-
-### Circuit RC — analyse frequentielle (Bode)
-`Circuit RC, R=2.2k, C=47n, Bode de 10Hz a 10MHz`
-
-### Circuits generalises (generes par IA)
-- `Filtre RLC serie R=100, L=10mH, C=1uF — sinus 1kHz`
-- `Ampli-op inverseur, R1=10k, R2=100k, alimentation ±15V`
-- `Oscillateur a pont de Wien, R=10k, C=10n`
-
-> **Note IA** : pour les circuits hors-template (ampli-op, RLC, transistor…), Claude Haiku genere le fichier `.asc` entierement. La topologie et les valeurs sont correctes ; de legeres corrections visuelles (deplacement de fils) peuvent etre necessaires dans LTSpice XVII.
-
-## Exemples d'enonces RC couverts
-
-### Exercice 1.a (passe-bas, saut unique)
-"R=1kOhm, C=1uF, Vin passe de 1V a 6V a t=0."
-
-### Exercice 1.b (deux sauts)
-"R=1kOhm, C=1uF, saut de -5V a t=0 puis saut de +5V a t=10ms."
-
-### Exercice 2.a (signal carre, charge/decharge complete)
-"R1=1kOhm, R2=4kOhm, C=20nF, signal carre de periode T=2ms, niveau bas 1V, niveau haut 6V."
-
-### Exercice 2.b (signal carre, regime de cretes)
-"Meme circuit RC, periode tres courte, calculer Vmax, Vmin et l'ondulation."
-
-### Exercice 3 (Thevenin)
-"R1=1k, R2=2k, R3=1k, C=20nF, R2 en parallele avec C, signal carre 0 a 5V, T=1ms."
-
-### Exercices puissance couverts
-
-**Puissances dans une maille série :**
-> On considère une seule maille composée d'une source $V_{IN}=10V$, puis de deux résistances $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par $V_{IN}$.
-
-**Puissances avec source de courant en parallèle :**
-> Source de courant $I_0=1mA$ en parallèle avec $R_1=1k\Omega$ et $R_2=4k\Omega$. Calculer la puissance absorbée par chaque résistance et la puissance fournie par la source.
-
-**Puissances avec deux sources de tension :**
-> Je souhaite calculer les puissances fournies et absorbées. Je propose une maille avec deux sources de tension $V_1=2V$ et $V_2=5V$ séparées par une résistance $R=1k\Omega$. Calculer les trois puissances et dire qui absorbe et qui fournit.
+> **Note mode Général** : pour les circuits hors-template (ampli-op, RLC, oscillateur…), Claude Haiku génère le fichier `.asc` entièrement. La topologie et les valeurs sont correctes ; de légères corrections visuelles peuvent être nécessaires dans LTSpice XVII.
 
 ## Architecture
 
 ```text
 .
-|- app.py
-|- main.py
-|- ltspice_generator.py
-|- prompts/
-|  |- passive.py
-|  |- diodes.py
-|  |- diode_zener.py
-|  |- transistor.py
-|  |- general.py
-|- templates/
-|  |- diviseur_resistif_fixe.asc
-|  |- diviseur_resistif_variable.asc
-|  |- rc_sinus_temporel.asc
-|  |- rc_sinus_frequentiel.asc
-|  |- general.asc
+├── app.py
+├── main.py
+├── ltspice_generator.py
+├── prompts/
+│   ├── passive.py
+│   ├── diodes.py
+│   ├── diode_zener.py
+│   ├── transistor.py
+│   └── general.py
+└── templates/
+    ├── diviseur_resistif_fixe.asc
+    ├── diviseur_resistif_variable.asc
+    ├── rc_sinus_temporel.asc
+    ├── rc_sinus_frequentiel.asc
+    ├── zener_diviseur.asc
+    ├── stabbilisateur_tension_zener.asc
+    ├── amplificateur_bipolaire.asc
+    └── general.asc
 ```
 
-### Fichiers
-- `app.py` : interface Streamlit, session state, affichage des traces
-- `main.py` : detection, extraction de parametres, appels IA, traceurs
-- `ltspice_generator.py` : detection du type de circuit, injection de parametres dans les templates, generation IA
-- `prompts/passive.py` : prompts RC, puissance, diviseur
-- `templates/` : fichiers `.asc` LTSpice verifies (positions de composants corrigees)
+### Fichiers principaux
 
-### Routage principal
-`detecter_type_probleme(question)`
+- `app.py` : interface Streamlit, session state, formulaires, affichage des tracés
+- `main.py` : détection du type d'exercice, extraction de paramètres, appels IA, traceurs matplotlib
+- `ltspice_generator.py` : injection de paramètres dans les templates, génération IA (Haiku), analyse d'énoncé libre
+- `prompts/` : prompts spécialisés par famille de circuit
+- `templates/` : fichiers `.asc` LTSpice XVII vérifiés (UTF-8, coordonnées validées)
 
-Ordre de priorite actuel (resume) :
-1. Diodes
-2. RC signal carre cretes
-3. RC Thevenin
-4. RC signal carre
-5. RC passe-bas
-6. Inverseur / puissance / transistor / diviseur
-7. General
+### API publique de `ltspice_generator`
 
-## Fonctions cle ajoutees pour RC
+```python
+analyser_enonce_ia(enonce, client=None) -> dict
+# Identifie le meilleur template depuis un texte libre (Haiku JSON)
+# {"type_circuit": str, "parametres": {str: float}, "explication": str}
 
-### Explication IA
-- `expliquer_premier_ordre_passe_bas()`
-- `expliquer_premier_ordre_signal_carre()`
-- `expliquer_premier_ordre_signal_carre_crete()`
-- `expliquer_thevenin_rc_signal_carre()`
-
-### Extraction de parametres
-- `extraire_parametres_rc()` : extracteur RC commun pour les cas passe-bas, signal carre et Thevenin
-- `extraire_parametres_passe_bas_premier_ordre()`
-- `extraire_parametres_signal_carre_rc()`
-- `extraire_parametres_thevenin_rc_signal_carre()`
-
-Gestion des unites/préfixes : `k`, `m`, `u`, `micro`, `n`, `nano`, `p`, `meg`.
-Normalisation amont des énoncés RC : texte copié depuis PDF/Word, symboles Unicode, indices éclatés sur plusieurs lignes, espaces autour de `=`.
-
-### Traceurs
-- `tracer_passe_bas_premier_ordre()`
-- `tracer_signal_carre_rc()`
-- `tracer_thevenin_rc_signal_carre()`
-
-## Corrections techniques importantes
-
-### Nettoyage de code non desire dans les reponses IA
-- Ajout d'un filtre backend `nettoyer_reponse_sans_code()` pour supprimer blocs ```...``` et imports parasites.
-
-### Correction regex mots-cles courts
-- Correction de l'usage de `\b` avec `re.escape(...)` pour eviter les faux positifs/faux negatifs.
-
-### Correction parsing unites
-- Ajout de la prise en charge explicite de `micro` et `nano` dans les extracteurs.
-
-### Correction extraction RC et valeurs par defaut
-- Factorisation de l'extraction RC dans une fonction commune pour les differents exercices RC.
-- Ajout d'une normalisation des énoncés avant regex pour gérer les copier-coller depuis PDF/Word.
-- Correction du cas où les tracés retombaient sur les valeurs par défaut faute d'extraction des paramètres.
-
-### Correction bug de formatage des prompts (critique)
-- Erreur resolue : `KeyError: '-t/\\tau'` due aux accolades LaTeX non echappees lors de `.format()`.
-- Solution : doubles accolades pour les blocs LaTeX litteraux dans les prompts.
+generer_asc_depuis_params(type_circuit, params, enonce_ia=None, client=None) -> dict
+# Génère le .asc depuis des paramètres explicites (formulaire ou analyse IA)
+# {"asc_path", "asc_content", "parametres", "type_circuit", "template_fichier", "ia_generated"}
+```
 
 ## Limites actuelles
-- Pas de verification symbolique formelle
-- Pas d'export PDF/PNG integre
+
+- Pas de vérification symbolique formelle
+- Pas d'export PDF/PNG intégré
 - Pas d'historique persistant des conversations
 
-## Pistes d'amelioration
-- Ajouter une suite de tests unitaires pour les extracteurs regex
-- Ajouter des tests de non-regression sur la detection de type
+## Pistes d'amélioration
+
+- Ajouter une suite de tests unitaires pour les extracteurs de paramètres
+- Ajouter des tests de non-régression sur la détection de type
 - Ajouter export de courbes et rapport automatique
 - [x] Upload d'image de circuit pour analyse automatique
-- [x] Activer le backend du mode Simulation LTspice (generation `.asc` depuis enonce textuel)
+- [x] Génération `.asc` depuis énoncé textuel (7 templates + IA)
+- [x] Interface formulaire structurée par type de circuit
 
-## 📚 Ressources
+## Ressources
 
 - [Documentation Anthropic Claude](https://docs.anthropic.com/)
 - [Streamlit Documentation](https://docs.streamlit.io/)
-- [Matplotlib Tutorial](https://matplotlib.org/stable/tutorials/index.html)
+- [LTSpice XVII](https://www.analog.com/en/resources/design-tools-and-calculators/ltspice-simulator.html)
 
-## 👨‍💼 Auteur
+## Auteur
 
 Créé pour les étudiants en Électronique I à l'EPFL.
 
-## 📄 Licence
+## Licence
 
-MIT - Libre d'utilisation et de modification.
+MIT — Libre d'utilisation et de modification.
 
 ---
 
-**Questions ou problèmes ?** Vérifiez que :
+**Questions ou problèmes ?** Vérifier que :
 1. ✅ La clé API est dans `.env`
 2. ✅ Les paquets sont installés (`pip list | grep streamlit`)
 3. ✅ Vous êtes dans l'environnement virtuel

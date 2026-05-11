@@ -60,147 +60,243 @@ if "plot_params" not in st.session_state:
     st.session_state.plot_params = None
 if "ui_mode" not in st.session_state:
     st.session_state.ui_mode = "exercise"
+if "ltspice_resultat" not in st.session_state:
+    st.session_state.ltspice_resultat = None
+if "ltspice_last_type" not in st.session_state:
+    st.session_state.ltspice_last_type = None
 
-# Sélecteur de mode (UI)
-st.markdown(
-    """
-    <style>
-    .mode-card {
-        border: 2px solid #5f6b85;
-        border-radius: 12px;
-        padding: 14px;
-        background: linear-gradient(160deg, #1f2937 0%, #111827 100%);
-        min-height: 130px;
-        box-shadow: 0 2px 10px rgba(17, 24, 39, 0.35);
-    }
-    .mode-title {
-        font-weight: 700;
-        font-size: 1.02rem;
-        margin-bottom: 6px;
-        color: #f8fafc;
-    }
-    .mode-desc {
-        color: #d1d5db;
-        font-size: 0.92rem;
-        line-height: 1.35;
-    }
-    .mode-badge {
-        display: inline-block;
-        margin-top: 8px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: #2563eb;
-        color: #eff6ff;
-        font-size: 0.78rem;
-        font-weight: 600;
-        border: 1px solid #93c5fd;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+_mode = st.session_state.ui_mode
+_active_col = "1" if _mode == "exercise" else "2"
+st.markdown(f"""
+<style>
+div[data-testid="stColumn"] div[data-testid="stButton"] button {{
+    background: linear-gradient(160deg, #1f2937 0%, #111827 100%) !important;
+    border: 2px solid #5f6b85 !important;
+    border-radius: 12px !important;
+    min-height: 130px !important;
+    height: auto !important;
+    color: #d1d5db !important;
+    white-space: pre-line !important;
+    text-align: left !important;
+    padding: 14px 18px !important;
+    font-size: 0.9rem !important;
+    line-height: 1.4 !important;
+}}
+div[data-testid="stColumn"] div[data-testid="stButton"] button:hover {{
+    border-color: #3b82f6 !important;
+    color: #f8fafc !important;
+}}
+div[data-testid="stColumn"]:nth-child({_active_col}) div[data-testid="stButton"] button {{
+    border-color: #2563eb !important;
+    color: #f8fafc !important;
+}}
+div[data-testid="stSelectbox"] input {{
+    pointer-events: none !important;
+    caret-color: transparent !important;
+}}
+</style>
+""", unsafe_allow_html=True)
 
 st.write("### 🎛️ Choix du mode")
 mode_col1, mode_col2 = st.columns(2)
 
 with mode_col1:
-    badge = "<span class='mode-badge'>Actif</span>" if st.session_state.ui_mode == "exercise" else ""
-    st.markdown(
-        f"""
-        <div class="mode-card">
-            <div class="mode-title">🧠 Résolution d'exercice</div>
-            <div class="mode-desc">Analyse guidée, détection automatique du type d'exercice, explication pas à pas.</div>
-            {badge}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Choisir Résolution", use_container_width=True):
+    _tag = "  ● Actif" if _mode == "exercise" else ""
+    if st.button(
+        f"🧠 Résolution d'exercice{_tag}\n\nAnalyse guidée, détection automatique du type d'exercice, explication pas à pas.",
+        use_container_width=True,
+        key="btn_mode_exercise",
+    ):
         st.session_state.ui_mode = "exercise"
         st.rerun()
 
 with mode_col2:
-    badge = "<span class='mode-badge'>Actif</span>" if st.session_state.ui_mode == "simulation" else ""
-    st.markdown(
-        f"""
-        <div class="mode-card">
-            <div class="mode-title">🧪 Simulation LTspice</div>
-            <div class="mode-desc">Manipulation et création de fichiers LTspice (.asc, .cir, .net).</div>
-            {badge}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Choisir Simulation", use_container_width=True):
+    _tag = "  ● Actif" if _mode == "simulation" else ""
+    if st.button(
+        f"🧪 Simulation LTspice{_tag}\n\nManipulation et création de fichiers LTspice (.asc, .cir, .net).",
+        use_container_width=True,
+        key="btn_mode_simulation",
+    ):
         st.session_state.ui_mode = "simulation"
         st.rerun()
 
 if st.session_state.ui_mode == "simulation":
-    from ltspice_generator import generer_asc_depuis_enonce
+    from ltspice_generator import generer_asc_depuis_params, analyser_enonce_ia
 
     st.write("---")
     st.write("### 🧪 Mode Simulation LTspice")
 
-    enonce_sim = st.text_area(
-        "Décris ton circuit",
-        placeholder=(
-            "Ex: Diviseur résistif, VIN=9V, R1=10k, R2=4.7k\n"
-            "Ex: Diviseur résistif variable, VIN=5V, R1=10k\n"
-            "Ex: Circuit RC sinusoïdal, R=1k, C=100n, f=10kHz — analyse temporelle\n"
-            "Ex: Circuit RC, R=2.2k, C=47n, Bode de 10Hz à 10MHz\n"
-            "Ex (IA): Filtre RLC série R=100Ω, L=10mH, C=1µF — sinus 1kHz\n"
-            "Ex (IA): Ampli-op inverseur, R1=10k, R2=100k, alimentation ±15V"
-        ),
-        height=120,
-        key="ltspice_enonce",
-    )
+    TYPES_CIRCUIT = {
+        "Diviseur résistif (résistances fixes)":          "diviseur_resistif_fixe",
+        "Diviseur résistif (résistance variable — sweep)": "diviseur_resistif_variable",
+        "Circuit RC — Analyse temporelle (sinus)":        "rc_sinus_temporel",
+        "Circuit RC — Analyse fréquentielle (Bode)":      "rc_sinus_frequentiel",
+        "Diviseur avec diode Zener":                      "zener_diviseur",
+        "Stabilisateur de tension Zener":                 "stabilisateur_tension_zener",
+        "Amplificateur bipolaire NPN (émetteur commun)":  "amplificateur_bipolaire",
+        "Général — description libre (IA)":               "general",
+    }
+    TYPES_INVERSE = {v: k for k, v in TYPES_CIRCUIT.items()}
 
-    if st.button("Générer le fichier .asc", use_container_width=True):
-        if not enonce_sim or not enonce_sim.strip():
-            st.warning("Saisis un énoncé avant de générer.")
-        else:
-            with st.spinner("Analyse de l'énoncé et génération du fichier…"):
+    type_label = st.selectbox("Type de circuit", list(TYPES_CIRCUIT.keys()), key="ltspice_type_select")
+    type_circuit = TYPES_CIRCUIT[type_label]
+
+    # Réinitialiser le résultat si le type change
+    if st.session_state.ltspice_last_type != type_circuit:
+        st.session_state.ltspice_resultat = None
+        st.session_state.ltspice_last_type = type_circuit
+
+    if type_circuit == "general":
+        enonce_sim = st.text_area(
+            "Décris ton circuit",
+            placeholder=(
+                "Ex: Filtre RLC série R=100Ω, L=10mH, C=1µF — sinus 1kHz\n"
+                "Ex: Ampli-op inverseur, R1=10k, R2=100k, alimentation ±15V\n"
+                "Ex: Pont de Wheatstone, 4 résistances de 1k, source 5V"
+            ),
+            height=130,
+            key="ltspice_enonce_general",
+        )
+        if st.button("Analyser et générer", use_container_width=True):
+            if not enonce_sim.strip():
+                st.warning("Saisis un énoncé avant de continuer.")
+            else:
+                with st.spinner("Analyse IA du circuit…"):
+                    try:
+                        analyse = analyser_enonce_ia(enonce_sim, client=client)
+                    except Exception as e:
+                        st.error(f"Erreur lors de l'analyse : {e}")
+                        st.stop()
+
+                type_detecte = analyse["type_circuit"]
+                params_ia    = analyse["parametres"]
+
+                if analyse.get("explication"):
+                    st.info(f"💡 {analyse['explication']}")
+
+                if type_detecte != "general":
+                    label_detecte = TYPES_INVERSE.get(type_detecte, type_detecte)
+                    st.success(f"Template identifié : **{label_detecte}**")
+                    if params_ia:
+                        st.write("**Paramètres extraits :**")
+                        cols = st.columns(min(len(params_ia), 4))
+                        for i, (k, v) in enumerate(params_ia.items()):
+                            cols[i % 4].metric(k, f"{v:g}")
+                else:
+                    st.info("Aucun template correspondant — génération IA du fichier .asc…")
+
+                with st.spinner("Génération du fichier…"):
+                    try:
+                        st.session_state.ltspice_resultat = generer_asc_depuis_params(
+                            type_detecte, params_ia, enonce_ia=enonce_sim, client=client
+                        )
+                    except Exception as e:
+                        st.error(f"Erreur de génération : {e}")
+                        st.stop()
+
+    else:
+        with st.form(key="form_ltspice"):
+            params = {}
+
+            if type_circuit == "diviseur_resistif_fixe":
+                c1, c2, c3 = st.columns(3)
+                params["VIN"] = c1.number_input("VIN (V)", value=10.0, min_value=0.1, step=0.5)
+                params["R1"]  = c2.number_input("R1 (Ω)", value=10000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["R2"]  = c3.number_input("R2 (Ω)", value=10000.0, min_value=1.0, step=100.0, format="%.0f")
+
+            elif type_circuit == "diviseur_resistif_variable":
+                c1, c2 = st.columns(2)
+                params["VIN"] = c1.number_input("VIN (V)", value=10.0, min_value=0.1, step=0.5)
+                params["R1"]  = c2.number_input("R1 fixe (Ω)", value=10000.0, min_value=1.0, step=100.0, format="%.0f")
+                st.caption("R2 balayée automatiquement par .step param (template prédéfini)")
+
+            elif type_circuit == "rc_sinus_temporel":
+                c1, c2, c3, c4 = st.columns(4)
+                params["R1"]   = c1.number_input("R (Ω)", value=1000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["C1"]   = c2.number_input("C (nF)", value=100.0, min_value=0.001, step=10.0) * 1e-9
+                params["Vamp"] = c3.number_input("Amplitude (V)", value=1.0, min_value=0.001)
+                params["freq"] = c4.number_input("Fréquence (Hz)", value=1000.0, min_value=0.1, step=100.0)
+
+            elif type_circuit == "rc_sinus_frequentiel":
+                c1, c2, c3, c4 = st.columns(4)
+                params["R1"]      = c1.number_input("R (Ω)", value=1000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["C1"]      = c2.number_input("C (nF)", value=100.0, min_value=0.001, step=10.0) * 1e-9
+                params["f_start"] = c3.number_input("f min (Hz)", value=1.0, min_value=0.01, step=1.0)
+                params["f_stop"]  = c4.number_input("f max (MHz)", value=10.0, min_value=0.001, step=1.0) * 1e6
+
+            elif type_circuit == "zener_diviseur":
+                c1, c2, c3, c4 = st.columns(4)
+                params["VIN"]  = c1.number_input("VIN amplitude (V)", value=12.0, min_value=0.1)
+                params["R1"]   = c2.number_input("R série (Ω)", value=1000.0, min_value=1.0, step=10.0, format="%.0f")
+                params["R2"]   = c3.number_input("R charge (Ω)", value=1000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["freq"] = c4.number_input("Fréquence (Hz)", value=1000.0, min_value=0.1, step=100.0)
+
+            elif type_circuit == "stabilisateur_tension_zener":
+                c1, c2, c3 = st.columns(3)
+                params["Vamp"] = c1.number_input("Amplitude source (V)", value=20.0, min_value=0.1)
+                params["freq"] = c2.number_input("Fréquence (Hz)", value=50.0, min_value=0.1, step=10.0)
+                params["R1"]   = c3.number_input("R série (Ω)", value=80.0, min_value=1.0, step=10.0, format="%.0f")
+                st.caption("RL balayée automatiquement par .step param (1Ω → 1MΩ)")
+
+            elif type_circuit == "amplificateur_bipolaire":
+                st.write("**Alimentation & signal d'entrée**")
+                c1, c2, c3 = st.columns(3)
+                params["VCC"]  = c1.number_input("VCC (V)", value=15.0, min_value=1.0, step=1.0)
+                params["Vamp"] = c2.number_input("VIN amplitude (mV)", value=10.0, min_value=0.001, step=1.0) * 1e-3
+                params["freq"] = c3.number_input("Fréquence (Hz)", value=1000.0, min_value=1.0, step=100.0)
+                st.write("**Résistances**")
+                c4, c5, c6, c7 = st.columns(4)
+                params["RC"] = c4.number_input("RC collecteur (Ω)", value=2000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["RE"] = c5.number_input("RE émetteur (Ω)", value=1000.0, min_value=1.0, step=100.0, format="%.0f")
+                params["R1"] = c6.number_input("R1 base (Ω)", value=2700.0, min_value=1.0, step=100.0, format="%.0f")
+                params["R2"] = c7.number_input("R2 base (Ω)", value=12300.0, min_value=1.0, step=100.0, format="%.0f")
+                st.caption("RL balayée automatiquement par .step param (50Ω → 550Ω)")
+
+            submitted = st.form_submit_button("⚡ Générer le fichier .asc", use_container_width=True)
+
+        if submitted:
+            with st.spinner("Génération du fichier…"):
                 try:
-                    resultat = generer_asc_depuis_enonce(enonce_sim, client=client)
+                    st.session_state.ltspice_resultat = generer_asc_depuis_params(
+                        type_circuit, params, client=client
+                    )
                 except Exception as e:
-                    st.error(f"Erreur lors de la génération : {e}")
+                    st.error(f"Erreur : {e}")
                     st.stop()
 
-            type_labels = {
-                "diviseur_resistif_fixe":    "Diviseur résistif (résistances fixes)",
-                "diviseur_resistif_variable": "Diviseur résistif (résistance variable)",
-                "rc_sinus_temporel":         "Circuit RC — Analyse temporelle (sinus)",
-                "rc_sinus_frequentiel":      "Circuit RC — Analyse fréquentielle (Bode)",
-                "general":                   "Circuit personnalisé — généré par IA",
-            }
-            label = type_labels.get(resultat["type_circuit"], resultat["type_circuit"])
-            st.success(f"Circuit détecté : **{label}** — template `{resultat['template_fichier']}`")
+    # Affichage du résultat (commun aux deux modes)
+    if st.session_state.ltspice_resultat is not None:
+        r = st.session_state.ltspice_resultat
+        type_labels = {
+            "diviseur_resistif_fixe":      "Diviseur résistif (résistances fixes)",
+            "diviseur_resistif_variable":  "Diviseur résistif (résistance variable)",
+            "rc_sinus_temporel":           "Circuit RC — Analyse temporelle (sinus)",
+            "rc_sinus_frequentiel":        "Circuit RC — Analyse fréquentielle (Bode)",
+            "zener_diviseur":              "Diviseur avec diode Zener",
+            "stabilisateur_tension_zener": "Stabilisateur de tension Zener",
+            "amplificateur_bipolaire":     "Amplificateur bipolaire NPN (émetteur commun)",
+            "general":                     "Circuit personnalisé — généré par IA",
+        }
+        label = type_labels.get(r["type_circuit"], r["type_circuit"])
+        st.success(f"Circuit : **{label}** — template `{r['template_fichier']}`")
 
-            if resultat.get("ia_generated"):
-                st.info(
-                    "Ce fichier a été généré entièrement par l'IA. "
-                    "Les positions des composants peuvent nécessiter de légères corrections "
-                    "visuelles dans LTSpice (déplacer/reconnecter des fils). "
-                    "La topologie et les valeurs sont correctes."
-                )
-
-            if resultat["parametres_bruts"]:
-                st.write("**Paramètres extraits :**")
-                cols = st.columns(min(len(resultat["parametres_bruts"]), 4))
-                for i, (k, v) in enumerate(resultat["parametres_bruts"].items()):
-                    cols[i % 4].metric(k, v)
-            else:
-                st.info("Aucun paramètre numérique détecté — le template par défaut a été utilisé.")
-
-            st.code(resultat["asc_content"], language="text")
-
-            st.download_button(
-                label="⬇️ Télécharger le fichier LTSpice (.asc)",
-                data=resultat["asc_content"],
-                file_name=f"circuit_{resultat['type_circuit']}.asc",
-                mime="text/plain",
-                use_container_width=True,
+        if r.get("ia_generated"):
+            st.info(
+                "Ce fichier a été généré entièrement par l'IA. "
+                "Les positions des composants peuvent nécessiter de légères corrections "
+                "visuelles dans LTSpice (déplacer/reconnecter des fils). "
+                "La topologie et les valeurs sont correctes."
             )
+
+        st.code(r["asc_content"], language="text")
+
+        st.download_button(
+            label="⬇️ Télécharger le fichier LTSpice (.asc)",
+            data=r["asc_content"],
+            file_name=f"circuit_{r['type_circuit']}.asc",
+            mime="text/plain",
+            use_container_width=True,
+        )
 
     st.stop()
 
