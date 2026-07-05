@@ -121,7 +121,7 @@ def detecter_type_probleme(question: str) -> str:
                           "gain", "beta", "hfe", "ic", "ib", "vce"]
     
     # Mots-clés pour diviseur de tension
-    keywords_diviseur = ["diviseur", "résistif", "r1", "r2"]
+    keywords_diviseur = ["diviseur de tension", "diviseur", "résistif"]
 
     # Mots-clés pour filtre passe-bas du premier ordre
     keywords_premier_ordre = [
@@ -153,7 +153,7 @@ def detecter_type_probleme(question: str) -> str:
     # Mots-clés pour puissance avec source de courant et résistances en parallèle
     keywords_puissance_parallele = [
         "source de courant", "i0", "i_0", "courant source",
-        "parallèle", "parallel", "en parallèle", "resistances en parallele",
+        "resistances en parallele",
         "exercice_4.2", "exercice 4.2"
     ]
 
@@ -187,7 +187,7 @@ def detecter_type_probleme(question: str) -> str:
         or re.search(r"\br3\s*=\s*\d+", question_lower) is not None
     )
 
-    # Ordre de priorité : diode > signal carré RC (crêtes) > signal carré RC > premier ordre > inverseur > puissance parallèle/série > transistor > diviseur > general
+    # Ordre de priorité : diode > signal carré RC (crêtes) > signal carré RC > premier ordre > inverseur > diviseur > puissance parallèle/série > transistor > general
     if contient_un_mot_cle(question_lower, keywords_diode):
         if is_zener:
             # Zener : toujours en mode SIMPLE (boîtes noires trop compliqué)
@@ -206,6 +206,8 @@ def detecter_type_probleme(question: str) -> str:
         return "premier_ordre_passe_bas"
     elif contient_un_mot_cle(question_lower, keywords_inverseur):
         return "inverseur"
+    elif contient_un_mot_cle(question_lower, keywords_diviseur):
+        return "diviseur"
     elif contient_un_mot_cle(question_lower, keywords_puissance_deux_sources):
         return "puissance_deux_sources"
     elif contient_un_mot_cle(question_lower, keywords_puissance_parallele):
@@ -214,8 +216,6 @@ def detecter_type_probleme(question: str) -> str:
         return "puissance_serie"
     elif contient_un_mot_cle(question_lower, keywords_transistor):
         return "transistor"
-    elif contient_un_mot_cle(question_lower, keywords_diviseur):
-        return "diviseur"
     else:
         return "general"
 
@@ -227,7 +227,7 @@ def expliquer_diviseur_tension(question: str, image_base64: str = None) -> str:
     
     response = client.messages.create(
         model="claude-haiku-4-5",
-        max_tokens=300,
+        max_tokens=500,
         messages=[
             {"role": "user", "content": content}
         ]
@@ -436,6 +436,7 @@ def expliquer_probleme(question: str, image_base64: str = None) -> str:
 def normaliser_texte_rc(question: str) -> str:
     """Normalise les énoncés RC copiés depuis PDF/Word avec symboles et indices éclatés."""
     texte = unicodedata.normalize("NFKC", question)
+    texte = texte.replace("\u03bc", "u")  # μ (résultat NFKC de µ) → u pour les préfixes SI
     texte = texte.lower().replace(",", ".")
     texte = texte.replace("‑", "-").replace("–", "-")
     texte = re.sub(r"\s+", " ", texte)
@@ -448,6 +449,8 @@ def normaliser_texte_rc(question: str) -> str:
 
     # Uniformiser les espaces autour de = sans coller tout le texte.
     texte = re.sub(r"\s*=\s*", "=", texte)
+    # Normaliser toutes les variantes de flèche droite en →
+    texte = re.sub(r"(?:->|=>|→|⟶|⇒|➞|⇾|⟹)", "→", texte)
     return texte
 
 def extraire_parametres_rc(question: str, mode: str) -> dict | None:
@@ -469,16 +472,25 @@ def extraire_parametres_rc(question: str, mode: str) -> dict | None:
         }
         return valeur * multiplicateurs.get(prefixe or "", 1.0)
 
-    def extraire_valeur(prefixes: list[str], unites: list[str]) -> float | None:
+    def extraire_valeur(prefixes: list[str], unites: list[str], noms: list[str] | None = None) -> float | None:
         pattern_prefixes = "|".join(re.escape(p) for p in prefixes)
         pattern_unites = "|".join(re.escape(u) for u in unites)
         match = re.search(
             rf"(?:{pattern_prefixes})\s*=\s*(\d+(?:\.\d+)?)\s*(micro|nano|meg|k|m|u|µ|n|p)?\s*(?:{pattern_unites})?",
             texte,
         )
-        if not match:
-            return None
-        return convertir_prefixe(float(match.group(1)), match.group(2))
+        if match:
+            return convertir_prefixe(float(match.group(1)), match.group(2))
+        # Fallback langage naturel: "résistance de 1 kΩ", "condensateur de 100 nF"
+        if noms:
+            pattern_noms = "|".join(re.escape(n) for n in noms)
+            match_nat = re.search(
+                rf"(?:{pattern_noms})\s+(?:de\s+|d[e']une?\s+)?(\d+(?:\.\d+)?)\s*(micro|nano|meg|k|m|u|n|p)?\s*(?:{pattern_unites})?",
+                texte,
+            )
+            if match_nat:
+                return convertir_prefixe(float(match_nat.group(1)), match_nat.group(2))
+        return None
 
     def extraire_periode() -> float | None:
         periode_match = re.search(
@@ -497,7 +509,7 @@ def extraire_parametres_rc(question: str, mode: str) -> dict | None:
 
     def extraire_niveaux_signal() -> tuple[float | None, float | None]:
         variant_match = re.search(
-            r"variant\s+de\s+(\-?\d+(?:\.\d+)?)\s*v?\s+[aà]\s+(\-?\d+(?:\.\d+)?)\s*v",
+            r"variant\s+de\s+(\-?\d+(?:\.\d+)?)\s*v?\s*(?:[aà]|→)\s*(\-?\d+(?:\.\d+)?)\s*v",
             texte,
         )
         if variant_match:
@@ -523,8 +535,8 @@ def extraire_parametres_rc(question: str, mode: str) -> dict | None:
         return v_bas, v_haut
 
     if mode == "passe_bas":
-        resistance = extraire_valeur(["r"], ["ohm", "ohms", "ω"])
-        capacite = extraire_valeur(["c"], ["f", "farad", "farads"])
+        resistance = extraire_valeur(["r"], ["ohm", "ohms", "ω"], noms=["résistance", "resistance"])
+        capacite = extraire_valeur(["c"], ["f", "farad", "farads"], noms=["condensateur", "capacité", "capacite"])
         if resistance is None or capacite is None:
             return None
 
@@ -542,14 +554,14 @@ def extraire_parametres_rc(question: str, mode: str) -> dict | None:
             vin_initial = float(initial_match_alt.group(1))
 
         transition_match = re.search(
-            r"passe\s+de\s*(\-?\d+(?:\.\d+)?)\s*v\s+à\s*(\-?\d+(?:\.\d+)?)\s*v",
+            r"(?:passe|passant|saut|allant)\s+(?:de\s*)?(\-?\d+(?:\.\d+)?)\s*v?\s*(?:[aà]|vers|→)\s*(\-?\d+(?:\.\d+)?)\s*v",
             texte,
         )
         if transition_match:
             vin_initial = float(transition_match.group(1))
             vin_final = float(transition_match.group(2))
 
-        saut_match = re.search(r"saut\s+de\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
+        saut_match = re.search(r"(?:saut|échelon|echelon)\s+de\s*(\-?\d+(?:\.\d+)?)\s*v", texte)
         if vin_final is None and saut_match:
             vin_final = vin_initial + float(saut_match.group(1))
 

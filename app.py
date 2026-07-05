@@ -376,7 +376,14 @@ if st.session_state.plot_type == "premier_ordre_passe_bas":
     fig = tracer_passe_bas_premier_ordre(**params)
     st.pyplot(fig)
     if st.session_state.plot_params is None:
-        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R=1kΩ, C=1µF, VIN: 0V→5V).")
+        st.warning("Paramètres non détectés — tracé avec valeurs par défaut (R=1kΩ, C=1µF, VIN: 0V→5V). Précise R=..., C=..., et une transition du type «saut de 0 V → 5 V».")
+    else:
+        p = st.session_state.plot_params
+        c_val = p['capacite']
+        c_str = f"{c_val*1e9:.3g} nF" if c_val < 1e-6 else f"{c_val*1e6:.3g} µF"
+        r_val = p['resistance']
+        r_str = f"{r_val/1e3:.3g} kΩ" if r_val >= 1e3 else f"{r_val:.3g} Ω"
+        st.caption(f"Paramètres extraits : R={r_str}, C={c_str}, VIN: {p['vin_initial']:.3g}V → {p['vin_final']:.3g}V")
     st.write("---")
 
 if st.session_state.plot_type == "premier_ordre_signal_carre":
@@ -385,7 +392,12 @@ if st.session_state.plot_type == "premier_ordre_signal_carre":
     fig = tracer_signal_carre_rc(**params)
     st.pyplot(fig)
     if st.session_state.plot_params is None:
-        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R1=1kΩ, R2=4kΩ, C=20nF, T=2ms, niveaux 1V/6V).")
+        st.warning("Paramètres non détectés — tracé avec valeurs par défaut. Précise R1=..., R2=..., C=..., période=..., niveaux bas/haut.")
+    else:
+        p = st.session_state.plot_params
+        c_val = p['capacite']
+        c_str = f"{c_val*1e9:.3g} nF" if c_val < 1e-6 else f"{c_val*1e6:.3g} µF"
+        st.caption(f"Paramètres extraits : R1={p['r1']:.3g}Ω, R2={p['r2']:.3g}Ω, C={c_str}, T={p['periode']*1e3:.3g}ms, niveaux {p['v_bas']:.3g}V/{p['v_haut']:.3g}V")
     st.write("---")
 
 if st.session_state.plot_type == "premier_ordre_signal_carre_crete":
@@ -394,7 +406,12 @@ if st.session_state.plot_type == "premier_ordre_signal_carre_crete":
     fig = tracer_signal_carre_rc(**params)
     st.pyplot(fig)
     if st.session_state.plot_params is None:
-        st.caption("Paramètres non détectés automatiquement: tracé affiché avec valeurs par défaut (R1=1kΩ, R2=4kΩ, C=20nF, T=2ms, niveaux 1V/6V).")
+        st.warning("Paramètres non détectés — tracé avec valeurs par défaut. Précise R1=..., R2=..., C=..., période=..., niveaux bas/haut.")
+    else:
+        p = st.session_state.plot_params
+        c_val = p['capacite']
+        c_str = f"{c_val*1e9:.3g} nF" if c_val < 1e-6 else f"{c_val*1e6:.3g} µF"
+        st.caption(f"Paramètres extraits : R1={p['r1']:.3g}Ω, R2={p['r2']:.3g}Ω, C={c_str}, T={p['periode']*1e3:.3g}ms, niveaux {p['v_bas']:.3g}V/{p['v_haut']:.3g}V")
     st.write("---")
 
 if st.session_state.plot_type == "thevenin_rc_signal_carre":
@@ -403,7 +420,12 @@ if st.session_state.plot_type == "thevenin_rc_signal_carre":
     fig = tracer_thevenin_rc_signal_carre(**params)
     st.pyplot(fig)
     if st.session_state.plot_params is None:
-        st.caption("Paramètres non détectés automatiquement: tracé avec valeurs par défaut (R1=1kΩ, R2=2kΩ, R3=1kΩ, C=20nF, T=1ms, 0V/5V).")
+        st.warning("Paramètres non détectés — tracé avec valeurs par défaut. Précise R1=..., R2=..., R3=..., C=..., période=..., niveaux bas/haut.")
+    else:
+        p = st.session_state.plot_params
+        c_val = p['capacite']
+        c_str = f"{c_val*1e9:.3g} nF" if c_val < 1e-6 else f"{c_val*1e6:.3g} µF"
+        st.caption(f"Paramètres extraits : R1={p['r1']:.3g}Ω, R2={p['r2']:.3g}Ω, R3={p['r3']:.3g}Ω, C={c_str}, T={p['periode']*1e3:.3g}ms, niveaux {p['v_bas']:.3g}V/{p['v_haut']:.3g}V")
     st.write("---")
 
 for i, message in enumerate(st.session_state.messages):
